@@ -18,7 +18,7 @@ specifiers:
   '@types/web': ^0.0.72
   '@vitest/coverage-istanbul': ^0.23.2
   github-markdown-css: ^5.1.0
-  lib-boilerplate: link:.
+  dlintr: link:.
   react: ^18.2.0
   react-dom: ^18.2.0
   react-router-dom: ^6.3.0
@@ -48,7 +48,7 @@ devDependencies:
   '@types/web': 0.0.72
   '@vitest/coverage-istanbul': 0.23.2_less@4.1.3+stylus@0.59.0
   github-markdown-css: 5.1.0
-  lib-boilerplate: 'link:'
+  dlintr: 'link:'
   react: 18.2.0
   react-dom: 18.2.0_react@18.2.0
   react-router-dom: 6.3.0_biqbaboplfbrettd7655fr4n2y
