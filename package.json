@@ -53,7 +53,7 @@
     "@types/node": "^18.7.16",
     "@types/react": "^18.0.27",
     "@types/react-dom": "^18.0.9",
-    "@types/web": "^0.0.75",
+    "@types/web": "^0.0.93",
     "@vitest/coverage-istanbul": "^0.23.2",
     "dlintr": "link:.",
     "github-markdown-css": "^5.1.0",
