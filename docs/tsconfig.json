@@ -1,7 +1,8 @@
 {
-  "extends": "..",
+  "extends": "@1stg/tsconfig/dom-lib",
   "compilerOptions": {
-    "baseUrl": ".",
-    "jsx": "react-jsx"
+    "allowArbitraryExtensions": true,
+    "jsx": "react-jsx",
+    "types": ["mdx"]
   }
 }
