@@ -9,7 +9,7 @@
   "license": "MIT",
   "packageManager": "pnpm@7.11.0",
   "engines": {
-    "node": "^12.20.0 || ^14.18.0 || >=16.0.0"
+    "node": ">=20.1.0"
   },
   "exports": "./src/index.ts",
   "files": [
@@ -20,6 +20,7 @@
     "build": "run-p build:*",
     "build:r": "r -f cjs",
     "build:tsc": "tsc -p src",
+    "build:wasm": "node scripts/hadolint-wasm.mjs",
     "codesandbox:install": "yarn",
     "dev": "vitest",
     "docs:build": "w -e docs -p --publicPath /",
@@ -31,6 +32,7 @@
     "postversion": "pnpm i --no-frozen-lockfile",
     "prepare": "simple-git-hooks",
     "prerelease": "pnpm build",
+    "pretest": "node scripts/hadolint-wasm.mjs",
     "release": "changeset publish",
     "serve": "sirv dist -s",
     "test": "vitest run --coverage",
@@ -38,19 +40,28 @@
     "vercel-build": "pnpm docs:build",
     "version": "changeset version"
   },
+  "peerDependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2"
+  },
+  "peerDependenciesMeta": {
+    "@bjorn3/browser_wasi_shim": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "tslib": "^2.4.0"
   },
   "devDependencies": {
     "@1stg/app-config": "^7.2.1",
     "@1stg/lib-config": "^10.2.1",
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@changesets/changelog-github": "^0.4.8",
     "@changesets/cli": "^2.24.4",
     "@pkgr/webpack": "^3.4.0",
     "@pkgr/webpack-mdx": "^2.2.0",
     "@size-limit/preset-small-lib": "^8.1.2",
     "@types/mdx": "^2.0.3",
-    "@types/node": "^18.7.16",
+    "@types/node": "^20",
     "@types/react": "^18.0.28",
     "@types/react-dom": "^18.0.11",
     "@types/web": "^0.0.93",
@@ -74,9 +85,13 @@
     "main": "./lib/index.cjs",
     "module": "./lib/index.js",
     "exports": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/index.js",
-      "require": "./lib/index.cjs"
+      ".": {
+        "types": "./lib/index.d.ts",
+        "browser": "./lib/browser.js",
+        "import": "./lib/index.js",
+        "require": "./lib/index.cjs"
+      },
+      "./package.json": "./package.json"
     },
     "types": "./lib/index.d.ts"
   },

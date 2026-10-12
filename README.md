@@ -20,6 +20,7 @@ Dockerfile linter, validate inline bash, powered by [`hadolint`](https://github.
 - [Usage](#usage)
   - [Install](#install)
   - [API](#api)
+  - [How it works](#how-it-works)
 - [Sponsors](#sponsors)
 - [Backers](#backers)
 - [Changelog](#changelog)
@@ -40,13 +41,49 @@ yarn add dlintr
 npm i dlintr
 ```
 
+Requires Node.js 20.1+ for the built-in [`node:wasi`][node-wasi].
+
 ### API
 
 ```js
-import echo from 'dlintr'
+import { getVersion, lint, run } from 'dlintr'
 
-echo()
+// Lint Dockerfile content and get the findings back.
+const results = await lint('FROM ubuntu:latest\nRUN apt-get update\n')
+// [
+//   { code: 'DL3007', line: 1, column: 1, level: 'warning', file: '-', message: '…' },
+//   { code: 'DL3009', line: 2, column: 1, level: 'info', file: '-', message: '…' },
+// ]
+
+await lint('FROM alpine:3.20\n', {
+  ignore: ['DL3009'], // rule codes to suppress
+  severityOverrides: { DL3007: 'error' }, // re-level a single rule
+  env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' }, // anything hadolint reads
+})
+
+await getVersion() // 'Haskell Dockerfile Linter 3.0.0'
+
+// Or drive the CLI directly, for options `lint` does not model.
+const { exitCode, stdout, stderr } = await run(
+  ['--no-color', '--failure-threshold', 'error', '-'],
+  {
+    stdin: 'FROM ubuntu:latest\n',
+  },
+)
 ```
+
+An unparseable Dockerfile is reported, not thrown: hadolint returns it as a `DL1000` finding with `level: 'error'`. Anything that stops hadolint before linting — a rejected option, for instance — is thrown, since it would otherwise be indistinguishable from a clean Dockerfile.
+
+`lint` returns findings and drops the exit code. To gate CI, either look at `level`, or use `run` with `--failure-threshold` and check `exitCode`.
+
+### How it works
+
+[`hadolint`][hadolint] is compiled to WASI with the GHC backend and executed in-process; there is no native binary and no Docker.
+
+- **Node** drives it with the built-in `node:wasi`, so there is nothing to install.
+- **Browsers** get [`@bjorn3/browser_wasi_shim`][bjorn3] (~29 kB minified) through the `browser` export condition. It is an optional peer dependency — install it if you target the browser, and Node users never pay for it.
+
+The Dockerfile is fed over stdin, which is why no filesystem has to be mounted: only what you pass to `lint`/`run` is ever visible to the linter, and it cannot read files from the host.
 
 ## Sponsors
 
@@ -71,5 +108,8 @@ Detailed changes for each release are documented in [CHANGELOG.md](./CHANGELOG.m
 [MIT][] © [JounQin][]@[1stG.me][]
 
 [1stg.me]: https://www.1stg.me
+[bjorn3]: https://github.com/bjorn3/browser_wasi_shim
+[hadolint]: https://github.com/hadolint/hadolint
 [jounqin]: https://GitHub.com/JounQin
 [mit]: http://opensource.org/licenses/MIT
+[node-wasi]: https://nodejs.org/api/wasi.html

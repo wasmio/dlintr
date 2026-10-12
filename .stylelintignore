@@ -2,6 +2,7 @@ coverage
 dist
 lib
 LICENSE
+/src/hadolint.wasm
 *.json
 *.log
 *.patch
