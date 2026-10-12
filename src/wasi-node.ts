@@ -28,8 +28,16 @@ const decoder = new TextDecoder()
 
 let compiled: Promise<WebAssembly.Module> | undefined
 
-const load = (): Promise<WebAssembly.Module> =>
-  (compiled ??= readFile(wasmPath()).then(bytes => WebAssembly.compile(bytes)))
+const load = (): Promise<WebAssembly.Module> => {
+  compiled ??= readFile(wasmPath())
+    .then(bytes => WebAssembly.compile(bytes))
+    .catch((error: unknown) => {
+      // A cached rejection would make one unreadable file permanent.
+      compiled = undefined
+      throw error
+    })
+  return compiled
+}
 
 /** A WASI `iovec` is `{ buf: u32, buf_len: u32 }`: 8 bytes, length second. */
 const IOVEC_SIZE = 8

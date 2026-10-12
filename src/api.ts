@@ -65,6 +65,11 @@ export const createDlinter = (runtime: WasiRuntime): Dlinter => {
     getVersion: () =>
       (version ??= runtime
         .run(['--version'])
-        .then(({ stdout }) => stdout.trim())),
+        .then(({ stdout }) => stdout.trim())
+        .catch((error: unknown) => {
+          // A cached rejection would make one transient failure permanent.
+          version = undefined
+          throw error
+        })),
   }
 }

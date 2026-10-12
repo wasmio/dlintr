@@ -15,10 +15,25 @@ interface CommandInstance {
 
 let compiled: Promise<WebAssembly.Module> | undefined
 
-const load = (): Promise<WebAssembly.Module> =>
-  (compiled ??= fetch(WASM_URL)
-    .then(response => response.arrayBuffer())
-    .then(buffer => WebAssembly.compile(buffer)))
+/** `fetch` resolves on an error status, so check it before compiling the body. */
+const load = (): Promise<WebAssembly.Module> => {
+  compiled ??= fetch(WASM_URL)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(
+          `failed to fetch ${WASM_URL.pathname}: ${response.status} ${response.statusText}`,
+        )
+      }
+      return response.arrayBuffer()
+    })
+    .then(buffer => WebAssembly.compile(buffer))
+    .catch((error: unknown) => {
+      // A cached rejection would make one bad fetch permanent.
+      compiled = undefined
+      throw error
+    })
+  return compiled
+}
 
 export const createBrowserRuntime = (): WasiRuntime => ({
   run: async (args: string[], options: RunOptions = {}): Promise<RunResult> => {
