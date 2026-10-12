@@ -8,6 +8,7 @@ optimisticRepeatInstall: false
 autoInstallPeers: false
 strictPeerDependencies: false
 enablePrePostScripts: true
+provenance: true
 
 # No dependency's install script runs. The only one that would matter is
 # `simple-git-hooks`, and the root `prepare` installs the hooks explicitly.
