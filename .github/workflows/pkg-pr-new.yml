@@ -1,0 +1,51 @@
+name: Publish Any Commit
+
+on:
+  push:
+    # `changesets/action` v2 pushes through the GitHub API, which first creates a transient
+    # `changesets-ghcommit-temp/<branch>` ref; CI on that ref only produces runs that cancel each
+    # other and cancelled checks attached to the real commit
+    branches-ignore:
+      - 'changesets-ghcommit-temp/**'
+    # a push filter that only sets `branches-ignore` also stops running for tags
+    tags:
+      - '**'
+  pull_request: {}
+
+concurrency:
+  # give each main commit its own group, so a later push can neither cancel nor replace its run
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# The comment and the check run come from pkg.pr.new's own GitHub App, so the
+# token here only has to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Install Dependencies
+        run: pnpm i
+
+      - name: Build
+        run: pnpm build
+
+      # Run from the lockfile rather than through `pnpm dlx`: pkg.pr.new warns
+      # against the dlx/npx family in CI. `--pnpm` packs with the package manager
+      # this workspace actually uses.
+      - name: Publish
+        run: pnpm exec pkg-pr-new publish --pnpm
