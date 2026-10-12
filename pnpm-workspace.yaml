@@ -1,5 +1,3 @@
-# pnpm 10+ reads these here rather than from `.npmrc`, which it no longer
-# honours for most settings.
 overrides:
   typescript: npm:@typescript/typescript6@^6.0.2
   # typescript-eslint is a dependency of @1stg/eslint-config; force the whole
@@ -16,7 +14,7 @@ overrides:
   '@typescript-eslint/visitor-keys': ^8.71.2
   # 10.x ships only `types`/`import` in `exports`, so the `require.resolve`
   # commitlint does on its parser preset fails; 9.x still has a root export.
-  conventional-changelog-conventionalcommits: ^9.3.1
+  conventional-changelog-conventionalcommits: ^10.0.0
 
 # An up-to-date lockfile otherwise short-circuits the install and skips the root
 # `prepare`, leaving the git hooks stale.
