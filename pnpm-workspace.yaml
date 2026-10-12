@@ -12,9 +12,6 @@ overrides:
   '@typescript-eslint/typescript-estree': ^8.71.2
   '@typescript-eslint/utils': ^8.71.2
   '@typescript-eslint/visitor-keys': ^8.71.2
-  # 10.x ships only `types`/`import` in `exports`, so the `require.resolve`
-  # commitlint does on its parser preset fails; 9.x still has a root export.
-  conventional-changelog-conventionalcommits: ^10.0.0
 
 # An up-to-date lockfile otherwise short-circuits the install and skips the root
 # `prepare`, leaving the git hooks stale.
