@@ -5,5 +5,5 @@
     "lib": ["DOM", "ESNext"],
     "types": ["node"]
   },
-  "exclude": ["docs"]
+  "exclude": ["coverage", "dist", "docs", "lib", "node_modules"]
 }
