@@ -1,7 +1,5 @@
-import config from '@1stg/stylelint-config'
-
 export default {
-  ...config,
+  extends: ['@1stg/stylelint-config'],
   // A flat stylelint config is not paired with `.stylelintignore`; the paths it
   // listed, plus the sources the default CSS parser cannot read, live here.
   ignoreFiles: [

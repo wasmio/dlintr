@@ -17,8 +17,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# The comment and the check run come from pkg.pr.new's own GitHub App, so the
-# token here only has to read the repository.
 permissions:
   contents: read
 
@@ -44,8 +42,5 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Run from the lockfile rather than through `pnpm dlx`: pkg.pr.new warns
-      # against the dlx/npx family in CI. `--pnpm` packs with the package manager
-      # this workspace actually uses.
       - name: Publish
-        run: pnpm exec pkg-pr-new publish --pnpm
+        run: pnpm dlx pkg-pr-new publish --pnpm
