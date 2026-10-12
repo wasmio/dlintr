@@ -1,6 +1,6 @@
 {
   "name": "dlintr",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Dockerfile linter, validate inline bash, powered by hadolint with WASM",
   "repository": "git+https://github.com/wasmio/dlintr.git",
