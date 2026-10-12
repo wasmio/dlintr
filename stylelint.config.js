@@ -16,6 +16,5 @@ export default {
     'LICENSE',
     'hadolint.wasm',
     'lib/**',
-    'public/_redirects',
   ],
 }

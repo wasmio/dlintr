@@ -10,7 +10,6 @@ export default [
       'hadolint.wasm',
       'lib',
       'pnpm-lock.yaml',
-      'public/_redirects',
     ],
   },
   ...config,

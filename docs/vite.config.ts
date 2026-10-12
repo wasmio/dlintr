@@ -9,8 +9,8 @@ import { defineConfig } from 'vite'
  */
 export default defineConfig({
   base: '/',
-  // `public/` lives at the repository root; Vite copies it into `dist/` as is,
-  // which is how `_redirects` (the Cloudflare Pages SPA fallback) gets there.
+  // `public/` sits at the repository root rather than beside this config, so
+  // static files still belong there.
   publicDir: '../public',
   build: {
     outDir: '../dist',
