@@ -117,7 +117,15 @@
   },
   "size-limit": [
     {
-      "path": "lib/index.js"
+      "path": "lib/index.js",
+      "ignore": [
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "node:wasi"
+      ]
     }
   ],
   "typeCoverage": {
