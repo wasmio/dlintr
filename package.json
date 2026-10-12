@@ -7,7 +7,7 @@
   "author": "JounQin (https://www.1stG.me) <admin@1stg.me>",
   "funding": "https://opencollective.com/unts",
   "license": "MIT",
-  "packageManager": "pnpm@7.11.0",
+  "packageManager": "pnpm@12.11.2",
   "engines": {
     "node": ">=20.1.0"
   },
@@ -24,21 +24,21 @@
     "build:wasm": "node scripts/hadolint-wasm.mjs",
     "codesandbox:install": "yarn",
     "dev": "vitest",
-    "docs:build": "w -e docs -p --publicPath / -c '[\"public/_redirects\"]'",
-    "docs:dev": "w -e docs",
+    "docs:build": "vite build docs",
+    "docs:dev": "vite docs",
     "lint": "run-p lint:*",
     "lint:es": "eslint . --cache -f friendly --max-warnings 10",
     "lint:style": "stylelint . --cache",
-    "lint:tsc": "tsc --noEmit",
-    "postversion": "pnpm i --no-frozen-lockfile",
+    "lint:tsc": "tsc --noEmit && tsc -p docs --noEmit",
     "prepare": "simple-git-hooks",
     "prerelease": "pnpm build",
-    "pretest": "node scripts/hadolint-wasm.mjs",
     "release": "changeset publish",
     "serve": "sirv dist -s",
+    "pretest": "node scripts/hadolint-wasm.mjs",
     "test": "vitest run --coverage",
     "typecov": "type-coverage",
-    "version": "changeset version"
+    "version": "changeset version",
+    "postversion": "pnpm i --no-frozen-lockfile"
   },
   "peerDependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2"
@@ -52,34 +52,55 @@
     "tslib": "^2.4.0"
   },
   "devDependencies": {
-    "@1stg/app-config": "^7.2.1",
-    "@1stg/lib-config": "^10.2.1",
+    "@1stg/app-config": "^15.0.0",
+    "@1stg/browserslist-config": "^2.1.4",
+    "@1stg/commitlint-config": "^6.0.0",
+    "@1stg/eslint-config": "^10.3.0",
+    "@1stg/lint-staged": "^4.0.9",
+    "@1stg/markuplint-config": "^4.0.7",
+    "@1stg/prettier-config": "^5.4.0",
+    "@1stg/remark-preset": "^3.2.0",
+    "@1stg/simple-git-hooks": "^1.0.3",
+    "@1stg/stylelint-config": "^6.2.0",
+    "@1stg/tsconfig": "^4.0.0",
     "@bjorn3/browser_wasi_shim": "^0.4.2",
-    "@changesets/changelog-github": "^0.4.8",
-    "@changesets/cli": "^2.24.4",
-    "@pkgr/webpack": "^3.4.0",
-    "@pkgr/webpack-mdx": "^2.2.0",
-    "@size-limit/preset-small-lib": "^8.1.2",
+    "@changesets/changelog-github": "^1.0.0",
+    "@changesets/cli": "^3.0.0",
+    "@commitlint/cli": "^21.2.3",
+    "@eslint-react/eslint-plugin": ">=1.0.0",
+    "@mdx-js/rollup": "^3.1.1",
+    "@pkgr/rollup": "^6.0.0",
+    "@size-limit/preset-small-lib": "^14.0.0",
     "@types/mdx": "^2.0.3",
-    "@types/node": "^20",
-    "@types/react": "^18.0.28",
-    "@types/react-dom": "^18.0.11",
-    "@types/web": "^0.0.93",
-    "@vitest/coverage-istanbul": "^0.23.2",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-istanbul": "^5.0.0",
+    "@vitest/eslint-plugin": "^1.0.0",
+    "browserslist": "^4.28.2",
     "dlintr": "link:.",
+    "eslint": "^9.39.4",
+    "eslint-formatter-friendly": "^7.0.0",
+    "eslint-plugin-react-hooks": ">=5.0.0",
     "github-markdown-css": "^5.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.3.0",
-    "sirv-cli": "^2.0.2",
-    "size-limit": "^8.1.0",
+    "lint-staged": "^17.6.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "simple-git-hooks": "^2.14.0",
+    "sirv-cli": "^3.0.0",
+    "size-limit": "^14.0.0",
+    "stylelint": "^16.0.0",
     "type-coverage": "^2.22.0",
-    "typescript": "~4.7.4",
-    "unplugin-auto-import": "^0.11.2",
-    "vitest": "^0.23.2"
-  },
-  "resolutions": {
-    "typescript": "~4.7.4"
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "unplugin-auto-import": "^21.0.0",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.0"
   },
   "publishConfig": {
     "main": "./lib/index.cjs",
@@ -94,11 +115,6 @@
       "./package.json": "./package.json"
     },
     "types": "./lib/index.d.ts"
-  },
-  "pnpm": {
-    "overrides": {
-      "typescript": "~4.7.4"
-    }
   },
   "size-limit": [
     {

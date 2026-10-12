@@ -10,16 +10,17 @@ import { getVersion, lint } from '../src/browser.js'
  */
 const realFetch = globalThis.fetch
 
+/** The stub is handed a URL, a Request, or a plain string. */
+const toPath = (input: RequestInfo | URL): string => {
+  if (typeof input === 'string') {
+    return input
+  }
+  return input instanceof URL ? input.href : input.url
+}
+
 beforeAll(() => {
-  globalThis.fetch = ((input: RequestInfo | URL) => {
-    const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-        ? input.href
-        : input.url
-    return readFile(fileURLToPath(url)).then(bytes => new Response(bytes))
-  }) as typeof fetch
+  globalThis.fetch = (input: RequestInfo | URL) =>
+    readFile(fileURLToPath(toPath(input))).then(bytes => new Response(bytes))
 })
 
 afterAll(() => {

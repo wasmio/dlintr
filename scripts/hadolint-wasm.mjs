@@ -12,7 +12,7 @@
  */
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Upstream commit of https://github.com/wasilibs/go-hadolint. */
@@ -27,7 +27,7 @@ const SOURCE = `https://raw.githubusercontent.com/wasilibs/go-hadolint/${HADOLIN
 /** How much of the commit to show when reporting progress. */
 const SHORT_SHA = 8
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /**
  * @param {Buffer | Uint8Array} buffer
@@ -47,7 +47,7 @@ const digestOf = async file => {
 
 const main = async () => {
   const force = process.argv.includes('--force')
-  const target = join(root, 'hadolint.wasm')
+  const target = path.join(root, 'hadolint.wasm')
 
   if (!force && (await digestOf(target)) === HADOLINT_SHA256) {
     return

@@ -1,7 +1,7 @@
 import { openSync, closeSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { devNull } from 'node:os'
-import { join } from 'node:path'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { WASI } from 'node:wasi'
 
@@ -18,10 +18,10 @@ import type { RunOptions, RunResult } from './types.js'
  */
 const packageRoot = (): string =>
   typeof __dirname === 'string'
-    ? join(__dirname, '..')
+    ? path.join(__dirname, '..')
     : fileURLToPath(new URL('..', import.meta.url))
 
-const wasmPath = (): string => join(packageRoot(), 'hadolint.wasm')
+const wasmPath = (): string => path.join(packageRoot(), 'hadolint.wasm')
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()

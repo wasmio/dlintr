@@ -1,5 +1,5 @@
 {
   "name": "dlintr-docs",
-  "type": "commonjs",
+  "type": "module",
   "description": "A simple library boilerplate."
 }

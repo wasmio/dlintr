@@ -1,5 +1,5 @@
 ---
-'dlintr': minor
+"dlintr": minor
 ---
 
 Implement the actual Dockerfile linter
@@ -9,9 +9,9 @@ Implement the actual Dockerfile linter
 backend — in-process:
 
 ```js
-import { lint } from 'dlintr'
+import { lint } from "dlintr"
 
-await lint('FROM ubuntu:latest\nRUN apt-get update\n')
+await lint("FROM ubuntu:latest\nRUN apt-get update\n")
 // [{ code: 'DL3007', line: 1, level: 'warning', … }, { code: 'DL3009', line: 2, … }]
 ```
 
