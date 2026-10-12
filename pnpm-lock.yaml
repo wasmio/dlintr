@@ -185,7 +185,7 @@ importers:
     devDependencies:
       '@1stg/app-config':
         specifier: ^15.0.0
-        version: 15.0.0(821249e1de2b22489bb849aeb8d72571)
+        version: 15.0.0(98c6ace23882d1c1329daade0b38b8bd)
       '@1stg/browserslist-config':
         specifier: ^2.1.4
         version: 2.1.4(browserslist@4.29.3)
@@ -195,12 +195,12 @@ importers:
       '@1stg/eslint-config':
         specifier: ^10.3.0
         version: 10.3.1(@eslint-react/eslint-plugin@5.26.0(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript-eslint/utils@8.71.2(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.71.2(@typescript-eslint/parser@8.71.2(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0)(vitest@5.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(prettier@3.9.10)(remark-lint-file-extension@3.0.1)(supports-color@9.4.0)
-      '@1stg/lint-staged':
-        specifier: ^4.0.9
-        version: 4.0.9(@typescript/typescript6@6.0.2)(lint-staged@17.6.0)(supports-color@9.4.0)
       '@1stg/markuplint-config':
         specifier: ^4.0.7
         version: 4.0.7(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(markuplint@4.18.3(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)
+      '@1stg/nano-staged':
+        specifier: ^0.3.1
+        version: 0.3.1(@typescript/typescript6@6.0.2)(nano-staged@1.0.2)(supports-color@9.4.0)
       '@1stg/prettier-config':
         specifier: ^5.4.0
         version: 5.4.0(@typescript/typescript6@6.0.2)(prettier@3.9.10)(supports-color@9.4.0)
@@ -209,7 +209,7 @@ importers:
         version: 3.2.0(@types/mdast@4.0.4)(micromark-util-types@2.0.3)(micromark@4.0.3(supports-color@9.4.0))(prettier@3.9.10)(supports-color@9.4.0)(unified@11.0.5)
       '@1stg/simple-git-hooks':
         specifier: ^2.0.0
-        version: 2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(simple-git-hooks@2.14.0)
+        version: 2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(nano-staged@1.0.2)(simple-git-hooks@2.14.0)
       '@1stg/stylelint-config':
         specifier: ^6.2.0
         version: 6.2.0(postcss@8.5.29)(prettier@3.9.10)(stylelint@17.16.0(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)
@@ -282,9 +282,9 @@ importers:
       github-markdown-css:
         specifier: ^5.1.0
         version: 5.9.0
-      lint-staged:
-        specifier: ^17.6.0
-        version: 17.6.0
+      nano-staged:
+        specifier: ^1.0.2
+        version: 1.0.2
       npm-run-all:
         specifier: ^4.1.5
         version: 4.1.5
@@ -399,12 +399,6 @@ packages:
       eslint-plugin-vue:
         optional: true
 
-  '@1stg/lint-staged@4.0.9':
-    resolution: {integrity: sha512-RE4nUlTAHUF/mkOQpFtpWdmLi0nA0UNs/GizDLQXXzesgs+ElIXmweSskysSTG3m0uoJRFdbNxi3/Wb07he5sA==}
-    engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
-    peerDependencies:
-      lint-staged: '>=12.1.0'
-
   '@1stg/markuplint-config@4.0.7':
     resolution: {integrity: sha512-a55XiwTiUlei3tw0NIeZxeEz7zx2/JXjqLbb9HZppv/ebAzq09LksmfzAUeOhQtGeUS6yV9O85VM1OWiH3XiQg==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -449,11 +443,6 @@ packages:
     engines: {node: '>=18.12.0'}
     peerDependencies:
       stylelint: '>=16.0.0'
-
-  '@1stg/tsconfig@3.0.3':
-    resolution: {integrity: sha512-ZHQeaHtTXmhKeHhGrWkLZGlTEy3tv28c0D8V9IKqeJXkJFlyPHWT0k7Z5mIHpHwoJEZAbzU3YChli2TuaHgRCA==}
-    peerDependencies:
-      typescript: '>=5.7.0'
 
   '@1stg/tsconfig@4.0.0':
     resolution: {integrity: sha512-Ak4NtnG2Npn8+HcLYMKVRZxBcsl4mkZgpDMC/48vxPV+oBAoW+f9XAaXepzIejL7W7TsUUMiR3KXN68WupFdEQ==}
@@ -5335,11 +5324,6 @@ packages:
     resolution: {integrity: sha512-wM1+Z03eypVAVUCE7QdSqpVIvelbOakn1M0bPDoA4SGWPx3sNDVUiMo3L6To6WWGClB7VyXnhQ4Sn7gxiJbE6A==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  lint-staged@17.6.0:
-    resolution: {integrity: sha512-nOhBfYkZEwkFtNzD5pK9s9LkcWoxJ+whLzEnhqi9nl7zTB5n7tg8+9iYgMGx2Wm3VlLu8cbNj0RACzY+nWi5iQ==}
-    engines: {node: '>=22.22.1'}
-    hasBin: true
-
   load-json-file@4.0.0:
     resolution: {integrity: sha512-Kx8hMakjX03tiGTLAIdJ+lL0htKnXjEZN6hk/tozf/WOuYGdZBJrZ+rCJRbVCugsjB3jMLn9746NsQIf5VjBMw==}
     engines: {node: '>=4'}
@@ -5809,6 +5793,11 @@ packages:
 
   mustache@4.2.0:
     resolution: {integrity: sha512-71ippSywq5Yb7/tVYyGbkBggbU8H3u5Rz56fH60jGFgr8uHwxs+aSKeqmluIVzM0m0kB7xQjKS6qPfd0b2ZoqQ==}
+    hasBin: true
+
+  nano-staged@1.0.2:
+    resolution: {integrity: sha512-Fytar3zHLY99nlMfqPPbraxZodqQAHPpdPRyYaplL+lB9DCR6pUrafxbG+Btz4+7fO5Rm/+DO4ZeDO/nLSUMhw==}
+    engines: {node: ^22 || >= 24}
     hasBin: true
 
   nanoid@3.3.20:
@@ -7262,10 +7251,6 @@ packages:
   strict-event-emitter@0.5.1:
     resolution: {integrity: sha512-vMgjE/GGEPEFnhFub6pa4FmJBRBVOLpIII2hvCZ8Kzb7K0hlHo7mQv6xYrBvCL2LtAIBwFUK8wvuJgTVSQ5MFQ==}
 
-  string-argv@0.3.2:
-    resolution: {integrity: sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q==}
-    engines: {node: '>=0.6.19'}
-
   string-hash@1.1.3:
     resolution: {integrity: sha512-kJUvRUFK49aub+a7T1nNE66EJbZBMnBgoC1UbCZ5n6bsZKBRga4KgBRTMn/pFkeCZSYtNeSyMxPDM0AXWELk2A==}
 
@@ -8021,10 +8006,10 @@ packages:
 
 snapshots:
 
-  '@1stg/app-config@15.0.0(821249e1de2b22489bb849aeb8d72571)':
+  '@1stg/app-config@15.0.0(98c6ace23882d1c1329daade0b38b8bd)':
     dependencies:
       '@1stg/browserslist-config': 2.1.4(browserslist@4.29.3)
-      '@1stg/common-config': 15.0.0(157589cfb60080df95b8099069552bc6)
+      '@1stg/common-config': 15.0.0(7008abf20a92542d4d009ea1c7259b65)
       '@1stg/postcss-config': 6.2.0(browserslist@4.29.3)(postcss-load-config@4.0.2(postcss@8.5.29))(postcss@8.5.29)
       '@1stg/stylelint-config': 6.2.0(postcss@8.5.29)(prettier@3.9.10)(stylelint@17.16.0(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)
       browserslist: 4.29.3
@@ -8103,16 +8088,16 @@ snapshots:
       '@commitlint/config-workspace-scopes': 21.2.0
       '@pkgr/utils': 4.1.0
 
-  '@1stg/common-config@15.0.0(157589cfb60080df95b8099069552bc6)':
+  '@1stg/common-config@15.0.0(7008abf20a92542d4d009ea1c7259b65)':
     dependencies:
       '@1stg/babel-preset': 4.2.0(@babel/core@7.29.7(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(supports-color@9.4.0)
       '@1stg/commitlint-config': 6.0.0
       '@1stg/eslint-config': 10.3.1(@eslint-react/eslint-plugin@5.26.0(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript-eslint/utils@8.71.2(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(@vitest/eslint-plugin@1.6.27(@typescript-eslint/eslint-plugin@8.71.2(@typescript-eslint/parser@8.71.2(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(@typescript/typescript6@6.0.2)(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0)(vitest@5.0.3))(eslint-plugin-react-hooks@7.1.1(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0))(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(prettier@3.9.10)(remark-lint-file-extension@3.0.1)(supports-color@9.4.0)
       '@1stg/markuplint-config': 4.0.7(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(markuplint@4.18.3(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)
-      '@1stg/nano-staged': 0.3.1(@typescript/typescript6@6.0.2)(supports-color@9.4.0)
+      '@1stg/nano-staged': 0.3.1(@typescript/typescript6@6.0.2)(nano-staged@1.0.2)(supports-color@9.4.0)
       '@1stg/prettier-config': 5.4.0(@typescript/typescript6@6.0.2)(prettier@3.9.10)(supports-color@9.4.0)
       '@1stg/remark-preset': 3.2.0(@types/mdast@4.0.4)(micromark-util-types@2.0.3)(micromark@4.0.3(supports-color@9.4.0))(prettier@3.9.10)(supports-color@9.4.0)(unified@11.0.5)
-      '@1stg/simple-git-hooks': 2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(simple-git-hooks@2.14.0)
+      '@1stg/simple-git-hooks': 2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(nano-staged@1.0.2)(simple-git-hooks@2.14.0)
       '@1stg/tsconfig': 4.0.0(@typescript/typescript6@6.0.2)
       '@babel/core': 7.29.7(supports-color@9.4.0)
       tslib: 2.8.1
@@ -8199,18 +8184,6 @@ snapshots:
       - ts-declaration-location
       - typescript
 
-  '@1stg/lint-staged@4.0.9(@typescript/typescript6@6.0.2)(lint-staged@17.6.0)(supports-color@9.4.0)':
-    dependencies:
-      '@1stg/config': 1.2.1
-      '@1stg/prettier-config': 5.4.0(@typescript/typescript6@6.0.2)(prettier@3.9.10)(supports-color@9.4.0)
-      '@1stg/tsconfig': 3.0.3(@typescript/typescript6@6.0.2)
-      '@pkgr/core': 0.2.10
-      lint-staged: 17.6.0
-      prettier: 3.9.10
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
   '@1stg/markuplint-config@4.0.7(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(markuplint@4.18.3(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)':
     dependencies:
       '@markuplint/vue-parser': 4.18.3(eslint@10.12.0(jiti@2.6.1)(supports-color@9.4.0))(supports-color@9.4.0)
@@ -8221,12 +8194,13 @@ snapshots:
       - eslint
       - supports-color
 
-  '@1stg/nano-staged@0.3.1(@typescript/typescript6@6.0.2)(supports-color@9.4.0)':
+  '@1stg/nano-staged@0.3.1(@typescript/typescript6@6.0.2)(nano-staged@1.0.2)(supports-color@9.4.0)':
     dependencies:
       '@1stg/config': 1.2.1
       '@1stg/prettier-config': 5.4.0(@typescript/typescript6@6.0.2)(prettier@3.9.10)(supports-color@9.4.0)
       '@1stg/tsconfig': 4.0.0(@typescript/typescript6@6.0.2)
       '@pkgr/core': 0.3.6
+      nano-staged: 1.0.2
       prettier: 3.9.10
     transitivePeerDependencies:
       - supports-color
@@ -8292,10 +8266,11 @@ snapshots:
       - supports-color
       - unified
 
-  '@1stg/simple-git-hooks@2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(simple-git-hooks@2.14.0)':
+  '@1stg/simple-git-hooks@2.1.0(@commitlint/cli@21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3))(nano-staged@1.0.2)(simple-git-hooks@2.14.0)':
     dependencies:
       '@commitlint/cli': 21.2.3(@types/node@24.19.2)(@typescript/typescript6@6.0.2)(conventional-commits-parser@7.1.3)
       '@pkgr/utils': 4.1.0
+      nano-staged: 1.0.2
       simple-git-hooks: 2.14.0
 
   '@1stg/stylelint-config@6.2.0(postcss@8.5.29)(prettier@3.9.10)(stylelint@17.16.0(@typescript/typescript6@6.0.2)(supports-color@9.4.0))(supports-color@9.4.0)':
@@ -8318,10 +8293,6 @@ snapshots:
       - postcss-jsx
       - prettier
       - supports-color
-
-  '@1stg/tsconfig@3.0.3(@typescript/typescript6@6.0.2)':
-    dependencies:
-      typescript: '@typescript/typescript6@6.0.2'
 
   '@1stg/tsconfig@4.0.0(@typescript/typescript6@6.0.2)':
     dependencies:
@@ -13722,14 +13693,6 @@ snapshots:
 
   lines-and-columns@2.0.4: {}
 
-  lint-staged@17.6.0:
-    dependencies:
-      picomatch: 4.0.7
-      string-argv: 0.3.2
-      tinyexec: 1.3.1
-    optionalDependencies:
-      yaml: 2.9.1
-
   load-json-file@4.0.0:
     dependencies:
       graceful-fs: 4.2.11
@@ -14498,6 +14461,8 @@ snapshots:
       minimatch: 3.1.5
 
   mustache@4.2.0: {}
+
+  nano-staged@1.0.2: {}
 
   nanoid@3.3.20: {}
 
@@ -16533,8 +16498,6 @@ snapshots:
   stream-shift@1.0.3: {}
 
   strict-event-emitter@0.5.1: {}
-
-  string-argv@0.3.2: {}
 
   string-hash@1.1.3: {}
 
