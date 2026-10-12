@@ -1,17 +1,5 @@
 overrides:
   typescript: npm:@typescript/typescript6@^6.0.2
-  # typescript-eslint is a dependency of @1stg/eslint-config; force the whole
-  # @typescript-eslint family forward so a single version is in play.
-  typescript-eslint: ^8.71.2
-  '@typescript-eslint/eslint-plugin': ^8.71.2
-  '@typescript-eslint/parser': ^8.71.2
-  '@typescript-eslint/project-service': ^8.71.2
-  '@typescript-eslint/scope-manager': ^8.71.2
-  '@typescript-eslint/type-utils': ^8.71.2
-  '@typescript-eslint/types': ^8.71.2
-  '@typescript-eslint/typescript-estree': ^8.71.2
-  '@typescript-eslint/utils': ^8.71.2
-  '@typescript-eslint/visitor-keys': ^8.71.2
 
 # An up-to-date lockfile otherwise short-circuits the install and skips the root
 # `prepare`, leaving the git hooks stale.
@@ -30,15 +18,3 @@ allowBuilds:
   nodent-runtime: false
   simple-git-hooks: false
   unrs-resolver: false
-minimumReleaseAgeExclude:
-  - '@typescript-eslint/eslint-plugin@8.71.2'
-  - '@typescript-eslint/parser@8.71.2'
-  - '@typescript-eslint/project-service@8.71.2'
-  - '@typescript-eslint/scope-manager@8.71.2'
-  - '@typescript-eslint/tsconfig-utils@8.71.2'
-  - '@typescript-eslint/type-utils@8.71.2'
-  - '@typescript-eslint/types@8.71.2'
-  - '@typescript-eslint/typescript-estree@8.71.2'
-  - '@typescript-eslint/utils@8.71.2'
-  - '@typescript-eslint/visitor-keys@8.71.2'
-  - typescript-eslint@8.71.2
