@@ -4,7 +4,7 @@ import { DEFAULT_ENV, HADOLINT } from './runtime.js'
 import type { WasiRuntime } from './runtime.js'
 import type { RunOptions, RunResult } from './types.js'
 
-const WASM_URL = new URL('hadolint.wasm', import.meta.url)
+const WASM_URL = new URL('../hadolint.wasm', import.meta.url)
 
 const encoder = new TextEncoder()
 

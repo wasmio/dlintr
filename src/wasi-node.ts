@@ -10,17 +10,18 @@ import type { WasiRuntime } from './runtime.js'
 import type { RunOptions, RunResult } from './types.js'
 
 /**
- * The directory holding this module, for both the ESM and the CommonJS build.
+ * The package root, one level above both `src/` and `lib/`, for the ESM and the
+ * CommonJS build alike.
  *
  * The bundle `rollup` emits has no `import.meta` — it is stubbed out as `{}` — so
  * fall back to `__dirname`, which exists only there.
  */
-const moduleDirectory = (): string =>
+const packageRoot = (): string =>
   typeof __dirname === 'string'
-    ? __dirname
-    : fileURLToPath(new URL('.', import.meta.url))
+    ? join(__dirname, '..')
+    : fileURLToPath(new URL('..', import.meta.url))
 
-const wasmPath = (): string => join(moduleDirectory(), 'hadolint.wasm')
+const wasmPath = (): string => join(packageRoot(), 'hadolint.wasm')
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()

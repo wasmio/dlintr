@@ -6,12 +6,12 @@
  * upstream commit and verify the SHA-256 of what we download rather than
  * trusting `main` to stay put.
  *
- * It is written next to the sources as well as next to the build output, so
- * `new URL('./hadolint.wasm', import.meta.url)` resolves both when running from
- * `src/` (vitest) and from `lib/` (the published package).
+ * It is written to the package root, one level above both `src/` and `lib/`, so
+ * `new URL('../hadolint.wasm', import.meta.url)` resolves identically when
+ * running from the sources (vitest) and from the build output (published).
  */
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -47,16 +47,10 @@ const digestOf = async file => {
 
 const main = async () => {
   const force = process.argv.includes('--force')
-  const targets = [
-    join(root, 'src/hadolint.wasm'),
-    join(root, 'lib/hadolint.wasm'),
-  ]
+  const target = join(root, 'hadolint.wasm')
 
-  if (!force) {
-    const digests = await Promise.all(targets.map(target => digestOf(target)))
-    if (digests.every(digest => digest === HADOLINT_SHA256)) {
-      return
-    }
+  if (!force && (await digestOf(target)) === HADOLINT_SHA256) {
+    return
   }
 
   process.stderr.write(
@@ -80,10 +74,7 @@ const main = async () => {
     )
   }
 
-  for (const target of targets) {
-    await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, buffer)
-  }
+  await writeFile(target, buffer)
   process.stderr.write(
     `dlintr: hadolint.wasm ready (${(buffer.byteLength / 1024 / 1024).toFixed(
       1,
