@@ -2,7 +2,6 @@
 
 [![GitHub Actions](https://github.com/wasmio/dlintr/workflows/CI/badge.svg)](https://github.com/wasmio/dlintr/actions/workflows/ci.yml)
 [![Codecov](https://img.shields.io/codecov/c/github/wasmio/dlintr.svg)](https://codecov.io/gh/wasmio/dlintr)
-[![Language grade: JavaScript](https://img.shields.io/lgtm/grade/javascript/g/wasmio/dlintr.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/wasmio/dlintr/context:javascript)
 [![type-coverage](https://img.shields.io/badge/dynamic/json.svg?label=type-coverage&prefix=%E2%89%A5&suffix=%&query=$.typeCoverage.atLeast&uri=https%3A%2F%2Fraw.githubusercontent.com%2Fwasmio%2Fdlintr%2Fmain%2Fpackage.json)](https://github.com/plantain-00/type-coverage)
 [![npm](https://img.shields.io/npm/v/dlintr.svg)](https://www.npmjs.com/package/dlintr)
 [![GitHub Release](https://img.shields.io/github/release/wasmio/dlintr)](https://github.com/wasmio/dlintr/releases)
