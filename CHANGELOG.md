@@ -1,5 +1,15 @@
 # Change Log
 
+## 0.1.1
+
+### Patch Changes
+
+- [#27](https://github.com/wasmio/dlintr/pull/27) [`13c6275`](https://github.com/wasmio/dlintr/commit/13c6275bf6edec7b92d634cce4230966b05b0de5) Thanks [@JounQin](https://github.com/JounQin)! - Release with provenance
+
+  Published tarballs carry a provenance attestation naming the repository, commit
+  and workflow they were built from. The publish step now states
+  `provenance: true` rather than leaving it to trusted publishing's default.
+
 ## 0.1.0
 
 ### Minor Changes
