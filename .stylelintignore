@@ -3,6 +3,7 @@ dist
 lib
 LICENSE
 /hadolint.wasm
+/public/_redirects
 *.json
 *.log
 *.patch

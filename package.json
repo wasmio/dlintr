@@ -24,7 +24,7 @@
     "build:wasm": "node scripts/hadolint-wasm.mjs",
     "codesandbox:install": "yarn",
     "dev": "vitest",
-    "docs:build": "w -e docs -p --publicPath /",
+    "docs:build": "w -e docs -p --publicPath / -c '[\"public/_redirects\"]'",
     "docs:dev": "w -e docs",
     "lint": "run-p lint:*",
     "lint:es": "eslint . --cache -f friendly --max-warnings 10",
@@ -38,7 +38,6 @@
     "serve": "sirv dist -s",
     "test": "vitest run --coverage",
     "typecov": "type-coverage",
-    "vercel-build": "pnpm docs:build",
     "version": "changeset version"
   },
   "peerDependencies": {
