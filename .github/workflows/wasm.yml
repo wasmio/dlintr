@@ -134,6 +134,9 @@ jobs:
 
       - name: Install pinned GHC wasm toolchain
         if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          # `gh api` below needs it; it is not picked up implicitly.
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Fail legibly if the pinned bindist has been retired — it is a release
           # asset and can be deleted. Deliberately no fallback: the channel
@@ -192,7 +195,7 @@ jobs:
           echo "libdir:          $libdir"
 
           echo "::group::settings (the C toolchain it will actually drive)"
-          grep -E '^("C compiler command"|"cc"|"ld command"|"ar command"|"target platform")' \
+          grep -E '^("C compiler command"|"cc"|"ld command"|"ar command"|"target platform"|"C compiler flags"|"Cxx compiler flags"|"C preprocessor flags")' \
             "$libdir/settings" || true
           echo "::endgroup::"
 
@@ -201,15 +204,36 @@ jobs:
             | tr ' ' '\n' | grep -E '^(base|text|bytestring|containers)-' || true
           echo "::endgroup::"
 
-          echo "::group::hello world"
-          printf 'main = putStrLn "hi"\n' > /tmp/hello.hs
-          wasm32-wasi-ghc /tmp/hello.hs -o /tmp/hello.wasm
-          ls -l /tmp/hello.wasm
-          if command -v wasmtime > /dev/null; then
-            wasmtime /tmp/hello.wasm
-          else
-            echo "wasmtime is not on PATH, not running it"
-          fi
+          # Two hello worlds, deliberately. "the compiler alone works, cabal does
+          # not" and "neither works" point at completely different culprits, and
+          # one probe cannot tell them apart. The assembler error we are chasing
+          # is also suspiciously PIC-shaped, so if only the cabal one fails, the
+          # next thing to read is what flags cabal is adding.
+          run_wasm() {
+            if command -v wasmtime > /dev/null; then
+              wasmtime "$1"
+            else
+              echo "wasmtime is not on PATH, not running it"
+            fi
+          }
+
+          echo "::group::hello world, direct with wasm32-wasi-ghc"
+          printf 'main = putStrLn "hi"\n' > "$RUNNER_TEMP/hello.hs"
+          wasm32-wasi-ghc "$RUNNER_TEMP/hello.hs" -o "$RUNNER_TEMP/hello.wasm"
+          ls -l "$RUNNER_TEMP/hello.wasm"
+          run_wasm "$RUNNER_TEMP/hello.wasm"
+          echo "::endgroup::"
+
+          echo "::group::hello world, through wasm32-wasi-cabal"
+          probe="$RUNNER_TEMP/probe-hello"
+          mkdir -p "$probe"
+          printf 'main = putStrLn "hi"\n' > "$probe/Main.hs"
+          printf 'cabal-version: 2.4\nname: probe-hello\nversion: 0\nbuild-type: Simple\n\nexecutable probe-hello\n  main-is: Main.hs\n  build-depends: base\n  default-language: GHC2021\n' \
+            > "$probe/probe-hello.cabal"
+          (cd "$probe" && wasm32-wasi-cabal build exe:probe-hello)
+          probe_bin="$(cd "$probe" && wasm32-wasi-cabal list-bin exe:probe-hello)"
+          ls -l "$probe_bin"
+          run_wasm "$probe_bin"
           echo "::endgroup::"
 
       - name: Build hadolint.wasm
