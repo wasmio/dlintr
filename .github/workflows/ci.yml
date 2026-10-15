@@ -14,6 +14,14 @@ jobs:
   # binary from outside this repository.
   wasm:
     name: Build hadolint.wasm
+    # A called workflow cannot use more permissions than its caller grants, and
+    # requesting more than it is given fails the entire run at startup — before
+    # a single job exists to show why. These are scoped to this job so that the
+    # test matrix below keeps the workflow's default `contents: read`.
+    permissions:
+      contents: write # publishing to the release, on manual dispatch
+      id-token: write # provenance signing
+      attestations: write
     uses: ./.github/workflows/wasm.yml
 
   ci:
