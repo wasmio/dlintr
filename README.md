@@ -40,7 +40,8 @@ yarn add dlintr
 npm i dlintr
 ```
 
-`@bjorn3/browser_wasi_shim` is a dependency, and it is not optional.
+No runtime dependencies: the WASI surface hadolint needs is implemented in
+`src/wasi.ts`.
 
 ### API
 
@@ -90,16 +91,38 @@ hadolint's command-line interface, and now exports one function:
 - `ignore` and `severityOverrides` survive, applied to the returned findings —
   they only ever filtered and relabelled, so they never needed the Haskell side.
 - `env` survives too, and reaches hadolint through WASI as before.
-- **`@bjorn3/browser_wasi_shim` is now required on Node as well**, and the
-  README's old claim that Node needed nothing installed no longer holds. The
-  built-in `node:wasi` _cannot_ start this module: its `initialize` ends in
+- **`node:wasi` cannot host this module at all.** Its `initialize` ends in
   `proc_exit(71)` and the RTS never starts, so every call answers "RTS is not
   initialised". That is true of upstream's published reactor as well, so it is a
-  limitation of `node:wasi` rather than of this build. One WASI implementation
-  for both runtimes is the compensation.
+  limitation of `node:wasi` rather than of this build. Node and the browser
+  therefore share one WASI implementation, from `src/wasi.ts`.
 
 Nothing is fed over stdin any more: the Dockerfile is passed straight to `lint`,
 so the module never sees a file descriptor that could read the host.
+
+### The WASI surface, and its residual risk
+
+hadolint needs five WASI calls — `args_get`, `args_sizes_get`, `environ_get`,
+`environ_sizes_get` and `clock_time_get` — and never touches the other fifteen
+it declares, including all of `fd_*`, `path_*` and `proc_exit`. That is
+**measured, not assumed**: `node wasm/calls.mjs` instruments every import and
+reports what is actually called on each path. Run it when the hadolint submodule
+or the wasm recipe moves.
+
+`src/wasi.ts` implements those five and makes the rest **throw by name**, so a
+module that reaches further fails at `fd_write` with an explanation rather than
+silently losing output.
+
+Two things follow, stated plainly:
+
+- **The implemented surface is version-bound.** It is correct for the build that
+  was measured. That is exactly why the unimplemented imports throw rather than
+  doing nothing, and why `wasm/calls.mjs` is committed.
+- **This is not a tested third-party WASI implementation.** The stubs protect the
+  paths the test suite exercises. A path it does not exercise could reach an
+  unimplemented import in your hands, and the failure there is an exception
+  rather than a wrong answer — better than silent corruption, but not the same
+  guarantee a maintained WASI library gives.
 
 ### Why the build is checked for drift
 

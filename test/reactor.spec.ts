@@ -1,5 +1,4 @@
 import {
-  existsSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -23,7 +22,7 @@ const gluePath = path.join(root, 'ghc_wasm_jsffi.js')
  * The command build from the *same* commit — the only reference worth comparing
  * against. A difference would mean this package had forked the JSON format, and
  * a stored fixture would freeze whatever the format happened to be the day it
- * was recorded. The `WASM` workflow uploads it as the `hadolint-wasm` artifact;
+ * was recorded. The `WASM` workflow uploads it as the `hadolint-cli` artifact;
  * CI sets `DLINTR_REQUIRE_CLI`, so a missing file fails there instead of quietly
  * skipping the one real check on the format.
  */
@@ -106,13 +105,13 @@ const runCli = async (dockerfile: string): Promise<string> => {
     })
 
     const module = await WebAssembly.compile(readFileSync(cliWasm))
-    // `@bjorn3/browser_wasi_shim` declares `wasiImport` as
+    // Node types `node:wasi`'s `wasiImport` as
     // `{ [key: string]: (...args: Array<any>) => unknown }`, so its `any` is
     // inescapable here: annotating the binding narrows how it is *used*, but the
     // source type still carries it, and the assertion this config declines to
-    // credit is exactly the double cast that would silence it. Suppressed on
-    // this one line rather than by lowering the global floor — which is what
-    // `update: true` had been doing silently, one regression at a time.
+    // credit is exactly the double cast that would silence it. `node:wasi` is
+    // only used by this helper, to run the command build for the format check;
+    // the package itself no longer depends on a WASI implementation at all.
     // type-coverage:ignore-next-line
     const wasiImports: Record<string, WebAssembly.ExportValue> = wasi.wasiImport
     const instance = await WebAssembly.instantiate(module, {
@@ -162,10 +161,19 @@ test('both exports return Promises', async () => {
 })
 
 test('emits exactly the bytes the CLI emits for the same input', async () => {
-  if (!existsSync(cliWasm)) {
+  // Read once and handle absence, rather than stat-then-read: the check and
+  // the use cannot disagree if there is only one call.
+  let cli: Buffer | undefined
+  try {
+    cli = readFileSync(cliWasm)
+  } catch {
+    cli = undefined
+  }
+
+  if (!cli) {
     if (process.env.DLINTR_REQUIRE_CLI) {
       throw new Error(
-        `${path.basename(cliWasm)} is required here but missing. It is the command build from the same commit; the \`WASM\` workflow uploads it as the \`hadolint-wasm\` artifact.`,
+        `${path.basename(cliWasm)} is required here but missing. It is the command build from the same commit; the \`WASM\` workflow uploads it as the \`hadolint-cli\` artifact.`,
       )
     }
     console.warn(

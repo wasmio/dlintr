@@ -9,11 +9,17 @@ the only thing in the published package that is not source.
 
 There is one source, and it is this repository:
 
-1. `wasm/build.sh` builds hadolint's CLI (`exe:hadolint`) for `wasm32-wasi` out
-   of the `hadolint` submodule, which is pinned to a release tag.
-2. The `WASM` workflow runs that, smoke-tests the result, and uploads it as a
-   workflow artifact. `release.yml` attaches `hadolint.wasm` and its `.sha256`
-   to the release changesets creates.
+1. `wasm/build-reactor.sh` builds the **reactor** the runtime calls, out of the
+   `hadolint` submodule (pinned to a release tag): `hadolint.wasm` plus
+   `ghc_wasm_jsffi.js`, GHC's half of the JSFFI. Both are needed — the exports
+   are unreachable without the glue.
+   `wasm/build.sh` builds the CLI (`exe:hadolint`) as a WASI _command_ instead.
+   That is kept as the reference the byte-equality test compares against, and is
+   **not** what the runtime loads: `createReactor` rejects a command module.
+2. The `WASM` workflow runs both, smoke-tests the command, and uploads them as
+   two artifacts: `hadolint-wasm` (the reactor and its glue) and `hadolint-cli`
+   (the command, for the test). `release.yml` attaches `hadolint.wasm`,
+   `ghc_wasm_jsffi.js` and the `.sha256` to the release changesets creates.
 3. `scripts/hadolint-wasm.mjs` fetches that asset for this package's version and
    verifies it against the digest published beside it — see
    [the digest](#the-digest) for why that is not a constant in the script.
@@ -24,8 +30,10 @@ hadolint does compile to wasm, and publishes the result to its website. That
 module is a JSFFI _reactor_: its `setup` and `lint` exports read from the site's
 DOM (`#lint`, `#dockerfile__code`, `#version`), it has no `_start`, and it is
 deployed as a GitHub Pages site rather than a versioned, checksummed asset.
-This package needs a WASI _command_ — imports `wasi_snapshot_preview1`, exports
-`_start` — because that is what `node:wasi` and `browser_wasi_shim` execute.
+This package needs the opposite: a WASI _reactor_ — imports
+`wasi_snapshot_preview1`, exports `_initialize`, `lint` and `version`, and no
+`_start`. That is what `src/wasi.ts` hosts, and `createReactor` refuses a
+command module by name.
 
 Upstream also marks `exe:hadolint` as `buildable: False` on wasm32 and passes it
 `-threaded`, which wasm32-wasi cannot link.
@@ -150,8 +158,9 @@ FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 source ~/.ghc-wasm/env
 
 git submodule update --init
-bash wasm/build.sh                # writes ./hadolint.wasm
-node wasm/smoke.mjs hadolint.wasm # starts it and lints a Dockerfile
+bash wasm/build-reactor.sh        # writes ./hadolint.wasm + ./ghc_wasm_jsffi.js
+node wasm/calls.mjs              # what WASI imports it actually calls
+node wasm/smoke.mjs hadolint.wasm # only for the *command* build, see below
 ```
 
 To test against a binary you built yourself, put it in place and tell the

@@ -11,7 +11,8 @@
 -- it reads @#dockerfile__code@ and writes into @#version@ — and @exe:hadolint@
 -- is a WASI /command/ that upstream marks unbuildable on wasm32.
 --
--- __This has never been compiled.__ It exists so CI can try to.
+-- CI builds it, and the byte-equality test exercises it: its output is compared
+-- against the same commit's command build, byte for byte.
 module Main where
 
 import Data.Aeson (ToJSON (..), encode, object, (.=))

@@ -42,7 +42,6 @@
     "postversion": "pnpm i --no-frozen-lockfile"
   },
   "dependencies": {
-    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "tslib": "^2.4.0"
   },
   "devDependencies": {

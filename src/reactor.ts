@@ -8,7 +8,7 @@
  *
  * Two things here are not obvious and both are load-bearing.
  */
-import { WASI } from '@bjorn3/browser_wasi_shim'
+import { createWasiHost } from './wasi.js'
 
 /**
  * The glue `post-link.mjs` emits next to the wasm.
@@ -63,7 +63,7 @@ export const createReactor = async (
     )
   }
 
-  const wasi = new WASI([], [...env], [])
+  const wasi = createWasiHost(env)
 
   // The glue needs the instance's exports, but its output is needed *to*
   // instantiate — circular. It resolves because every access to those exports

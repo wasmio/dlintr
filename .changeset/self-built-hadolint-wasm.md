@@ -17,12 +17,12 @@ another project's committed blob, and from hadolint v2.15.1 instead of a March
 - `ignore` and `severityOverrides` are unchanged in behaviour — applied to the
   returned findings, which is all they ever needed. `env` is unchanged too, and
   still reaches hadolint through WASI.
-- **`@bjorn3/browser_wasi_shim` is now a required dependency**, not an optional
-  peer, and Node is no longer dependency-free. The built-in `node:wasi` cannot
-  start a GHC reactor: `initialize` ends in `proc_exit(71)` and the RTS never
-  starts. That is true of upstream's published reactor as well, so it is a
-  `node:wasi` limitation rather than a defect here. Both runtimes now share one
-  WASI implementation.
+- **`node:wasi` cannot host this module**, so an earlier draft of this release
+  took on `@bjorn3/browser_wasi_shim` to compensate. It does not: the WASI
+  surface hadolint actually calls is five functions, measured rather than
+  assumed (`node wasm/calls.mjs`), and `src/wasi.ts` implements them. The
+  package keeps **no runtime dependencies**, and the fifteen imports it never
+  calls throw by name if a future module reaches for them.
 - The module ships with `ghc_wasm_jsffi.js`, GHC's half of the JSFFI. The
   exports are unreachable without it, so the release carries it too.
 - It is smaller and more current: 7.9 MB against 12.4 MB, and seven rules the

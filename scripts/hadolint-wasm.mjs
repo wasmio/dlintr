@@ -35,7 +35,8 @@
  * running from the sources (vitest) and from the build output (published).
  */
 import { createHash } from 'node:crypto'
-import { readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,6 +80,12 @@ const get = async url => {
 
 const main = async () => {
   const target = path.join(root, 'hadolint.wasm')
+  // Two files, so both have to be present for the artifact to be usable. The
+  // runtime imports the glue to reach the exports at all: a checkout from
+  // before the reactor landed can hold `hadolint.wasm` and no glue, and
+  // skipping on the wasm alone would leave every `lint` rejecting.
+  const glue = path.join(root, 'ghc_wasm_jsffi.js')
+  const complete = existsSync(target) && existsSync(glue)
 
   if (process.env.HADOLINT_WASM_SKIP_FETCH) {
     return
@@ -87,6 +94,9 @@ const main = async () => {
   const force = process.argv.includes('--force')
   const current = await digestOf(target)
   const version = await packageVersion()
+  // `version` comes from this package's own manifest, not from the network, so
+  // this is not untrusted input reaching a request — the only external value
+  // in the URL is the release the package already claims to be.
   const url = `https://github.com/wasmio/dlintr/releases/download/v${version}/hadolint.wasm`
 
   let expected
@@ -98,10 +108,10 @@ const main = async () => {
     // Nothing published for this version yet. That is what the repository looks
     // like between adding this machinery and cutting the first release that
     // carries it: a binary already on disk is fine, silence is not.
-    if (current && !force) {
+    if (complete && !force) {
       process.stderr.write(
         `dlintr: no published hadolint.wasm for dlintr@${version} (${error.message})\n` +
-          'dlintr: using the existing hadolint.wasm unverified\n',
+          'dlintr: using the existing hadolint.wasm and ghc_wasm_jsffi.js unverified\n',
       )
       return
     }
@@ -116,19 +126,20 @@ const main = async () => {
         '',
         '  git submodule update --init',
         '  source ~/.ghc-wasm/env',
-        '  bash wasm/build.sh',
+        '  bash wasm/build-reactor.sh',
         '  HADOLINT_WASM_SKIP_FETCH=1 pnpm test',
       ].join('\n'),
       { cause: error },
     )
   }
 
-  if (!force && current === expected) {
+  // Only skip when *both* files are already in place and the wasm matches.
+  if (!force && complete && current === expected) {
     return
   }
 
   process.stderr.write(`dlintr: fetching hadolint.wasm for dlintr@${version}\n`)
-  const [wasm, glue] = await Promise.all([
+  const [wasm, glueSource] = await Promise.all([
     get(url).then(response => response.arrayBuffer()),
     get(`${url.slice(0, -'hadolint.wasm'.length)}ghc_wasm_jsffi.js`).then(
       response => response.text(),
@@ -143,10 +154,20 @@ const main = async () => {
     )
   }
 
-  await Promise.all([
-    writeFile(target, buffer),
-    writeFile(path.join(root, 'ghc_wasm_jsffi.js'), glue),
-  ])
+  // Written to a sibling then renamed, so a partial download is never
+  // observable under the name the runtime imports. A torn `hadolint.wasm`
+  // would fail to compile, but a torn `ghc_wasm_jsffi.js` is valid JavaScript
+  // that misbehaves — worth not being able to produce.
+  await Promise.all(
+    [
+      [target, buffer],
+      [glue, glueSource],
+    ].map(async ([destination, contents]) => {
+      const temporary = `${destination}.download`
+      await writeFile(temporary, contents)
+      await rename(temporary, destination)
+    }),
+  )
 
   process.stderr.write(
     `dlintr: hadolint.wasm ready (${(buffer.byteLength / 1024 / 1024).toFixed(
