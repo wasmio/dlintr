@@ -17,6 +17,9 @@ export default {
     'dist/**',
     'LICENSE',
     'hadolint.wasm',
+    // The `.sha256` beside it is fetched by CI along with the binary; it is a
+    // hex digest, which the CSS parser reports as `Unknown word`.
+    'hadolint.wasm.sha256',
     'lib/**',
     // The pinned hadolint checkout ships its own website CSS.
     'vendor/**',

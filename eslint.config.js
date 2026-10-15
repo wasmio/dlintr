@@ -8,6 +8,9 @@ export default [
       'coverage',
       'dist',
       'hadolint.wasm',
+      // Both are build outputs the WASM workflow drops in the package root, and
+      // the artifact download lands them there again in CI.
+      'hadolint.wasm.sha256',
       'lib',
       'pnpm-lock.yaml',
       // The pinned hadolint checkout; its website assets are not ours to lint.

@@ -6,4 +6,5 @@ lib
 /auto-imports.d.ts
 /pnpm-lock.yaml
 /hadolint.wasm
+/hadolint.wasm.sha256
 /vendor
