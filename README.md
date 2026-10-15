@@ -101,6 +101,27 @@ hadolint's command-line interface, and now exports one function:
 Nothing is fed over stdin any more: the Dockerfile is passed straight to `lint`,
 so the module never sees a file descriptor that could read the host.
 
+### Why the build is checked for drift
+
+The wasm is built by this repository, and identical inputs are _expected_ to
+produce identical bytes. Usually they do. Occasionally they do not, and that is
+worth stopping for: either something under `wasm/` changed without the recipe
+hash moving, or the toolchain produced a different binary from the same source.
+
+`wasm/digests.json` records a digest per (submodule revision, recipe hash), and
+`wasm.yml` fails when a build disagrees with the recorded value, before
+anything is attested or uploaded. The message names both digests and the two
+ways forward.
+
+This is a **drift check**, justified on its own terms: a build that differs for
+identical inputs is either nondeterminism worth knowing about or corruption.
+A divergent build is _also_ the only one so far observed to crash a test runner
+on Windows, but that rests on a single sample — **the check is not claimed to
+catch that, and it will not be until the correlation is actually shown.**
+
+The recorded value is not a reproducibility guarantee. It is the digest this
+combination produced the last time anyone looked.
+
 ## Sponsors
 
 | 1stG                                                                                                                               | RxTS                                                                                                                               | UnTS                                                                                                                               |

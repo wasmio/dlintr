@@ -13,7 +13,15 @@ name: WASM
 # not on every push.
 on:
   workflow_call: {}
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      allow_digest_drift:
+        description: >-
+          Proceed even though this build's wasm differs from the recorded digest
+          for identical inputs. Recorded in the run; does not change the
+          recorded value.
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -332,6 +340,17 @@ jobs:
             echo "\`release.yml\` attaches this and \`ghc_wasm_jsffi.js\` to the release"
             echo "changesets creates, which is where \`scripts/hadolint-wasm.mjs\` looks."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # A build that differs for identical inputs is an anomaly worth stopping
+      # for: either the recipe changed without the hash moving, or the toolchain
+      # produced a different binary from the same source. Deliberately before
+      # the attestation and the upload, so a divergent module is never the thing
+      # that gets published.
+      - name: Check the digest against the recorded one
+        run: |
+          node wasm/check-digest.mjs "${{ steps.wasm.outputs.digest }}"
+        env:
+          WASM_DIGEST_ALLOW_DRIFT: ${{ inputs.allow_digest_drift && 'true' || 'false' }}
 
       # Fork pull requests get a read-only token, so signing is not available.
       - name: Attest Build Provenance

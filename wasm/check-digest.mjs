@@ -1,0 +1,164 @@
+/**
+ * Is this build's wasm the one that identical inputs produced before?
+ *
+ * The build is *usually* reproducible and occasionally diverges, and the
+ * divergence is the interesting event: a module that differs for identical
+ * inputs is either nondeterminism worth knowing about or corruption. This
+ * records a digest per (submodule revision, recipe hash) and fails when a build
+ * disagrees with it.
+ *
+ * It is justified by anomaly detection on its own. A divergent build is *also*
+ * the one so far observed to crash a test runner, but that rests on a single
+ * sample and nothing here depends on it.
+ *
+ * Usage:
+ *   node wasm/check-digest.mjs <observed-sha256>
+ *   node wasm/check-digest.mjs --record <observed-sha256>
+ */
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const wasmDir = path.dirname(fileURLToPath(import.meta.url))
+const root = path.join(wasmDir, '..')
+const manifest = path.join(wasmDir, 'digests.json')
+
+/** Enough of the hash to identify a recipe without quoting a wall of hex. */
+const RECIPE_HASH_LENGTH = 16
+
+/**
+ * The recipe, as a hash over the files that decide the binary.
+ *
+ * @returns {string[]} Absolute paths of the recipe files, sorted.
+ */
+const recipeFiles = () => {
+  /** @type {string[]} */
+  const out = []
+  /** @param {string} dir */
+  const walk = dir => {
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(full)
+      } else if (
+        !entry.name.endsWith('.json') &&
+        !entry.name.endsWith('.mjs')
+      ) {
+        out.push(full)
+      }
+    }
+  }
+  walk(wasmDir)
+  return out.sort()
+}
+
+/**
+ * Computed here rather than with GitHub's `hashFiles`, so the same key can be
+ * derived locally — which is what makes `--record` meaningful off CI.
+ *
+ * @returns {string} A short, stable hash of the recipe.
+ */
+const recipeHash = () => {
+  const hash = createHash('sha256')
+  for (const file of recipeFiles()) {
+    hash.update(path.relative(root, file))
+    hash.update('\0')
+    hash.update(readFileSync(file))
+    hash.update('\0')
+  }
+  return hash.digest('hex').slice(0, RECIPE_HASH_LENGTH)
+}
+
+/**
+ * The submodule gitlink, read from `HEAD` so a bare clone works too.
+ *
+ * @returns {string} The pinned hadolint revision.
+ */
+const submoduleRevision = () =>
+  // A fixed command name, not a lookup through a writable PATH, which is
+  // what the rule guards against.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path
+  execFileSync('git', ['-C', root, 'rev-parse', 'HEAD:hadolint'])
+    .toString()
+    .trim()
+
+const main = () => {
+  const args = process.argv.slice(2)
+  const record = args.includes('--record')
+  const observed = args.find(argument => !argument.startsWith('--'))
+
+  if (!observed || !/^[0-9a-f]{64}$/.test(observed)) {
+    console.error('usage: node wasm/check-digest.mjs [--record] <sha256>')
+    return 2
+  }
+
+  const key = `${submoduleRevision()}:${recipeHash()}`
+  const digests = JSON.parse(readFileSync(manifest, 'utf8'))
+  const recorded = digests[key]
+
+  if (record) {
+    digests[key] = { sha256: observed, hadolint: digests[key]?.hadolint ?? '' }
+    writeFileSync(manifest, `${JSON.stringify(digests, null, 2)}\n`)
+    console.log(`recorded ${key} -> ${observed}`)
+    return 0
+  }
+
+  if (!recorded) {
+    console.log(
+      [
+        `No digest recorded for ${key}.`,
+        '',
+        'That is not a divergence — it is a combination nobody has recorded yet,',
+        'which is what every submodule bump or recipe change looks like the first',
+        'time. The build is unaffected.',
+        '',
+        'To have this combination checked from now on:',
+        '',
+        `  node wasm/check-digest.mjs --record ${observed}`,
+        '',
+        'and commit wasm/digests.json with your change.',
+      ].join('\n'),
+    )
+    return 0
+  }
+
+  if (recorded.sha256 === observed) {
+    console.log(`wasm digest matches the recorded value for ${key}`)
+    return 0
+  }
+
+  console.log(
+    [
+      'This is a divergence, and it deliberately stops the build.',
+      '',
+      `  inputs    ${key}`,
+      `  recorded  ${recorded.sha256}`,
+      `  observed  ${observed}`,
+      '',
+      'Identical inputs are expected to produce identical bytes. Usually they do.',
+      'When they do not, either something under wasm/ changed without the recipe',
+      'hash moving, or the toolchain produced a different binary from the same',
+      'source — and a build that differs for no reason is worth understanding',
+      'before it is published.',
+      '',
+      'If you have looked and the difference is expected:',
+      '',
+      '  1. record it, so the next build is compared against this one:',
+      `       node wasm/check-digest.mjs --record ${observed}`,
+      '     and commit wasm/digests.json with whatever caused it;',
+      '',
+      '  2. or proceed without recording by re-running the WASM workflow with the',
+      '     `allow_digest_drift` input set to true. That is visible in the run and',
+      '     in the job log, and it does not change the recorded value.',
+    ].join('\n'),
+  )
+
+  return process.env.WASM_DIGEST_ALLOW_DRIFT === 'true' ? 0 : 1
+}
+
+process.exitCode = main()
