@@ -28,10 +28,16 @@ on:
       - vendor/hadolint
       - wasm/**
 
-# A build only matters if it is the newest one.
+# A build only matters if it is the newest one. `github.workflow` is the name of
+# the *caller*, which keeps this from being two workflows that both need the
+# artifact on the same commit — CI and the preview publish, say — cancelling
+# each other's build and leaving one of them with nothing to download.
 concurrency:
-  group: wasm-${{ github.ref }}
-  cancel-in-progress: true
+  group: wasm-${{ github.workflow }}-${{ github.ref }}
+  # Only supersede on pull requests. Cancelling an in-flight build on a branch
+  # that is being iterated on throws away a twenty-minute toolchain install to
+  # save a typo fix — precisely when the result is worth most.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -54,7 +60,8 @@ jobs:
       # ghc-wasm-meta revision it runs from, so pinning the revision is what
       # pins the compiler *and* the clang it was built against. Master has moved
       # on to a newer bindist, hence naming a revision at all.
-      GHC_WASM_META_REV: 60098a50
+      GHC_WASM_META_REV: 60098a5076557e327b326a1a3ba3b5fb4fec1e49
+      GHC_WASM_BINDIST_TAG: 20260403T135157
       GHC_WASM_BINDIST_URL: https://github.com/haskell-wasm/ghc-wasm-bindists/releases/download/20260403T135157/wasm32-wasi-ghc-9.10.tar.xz
       GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
       # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
@@ -149,11 +156,61 @@ jobs:
             exit 1
           fi
 
+          # `setup.sh` downloads into a `mktemp -d` that it deletes on exit, so
+          # the tarball cannot be hashed after the fact. Pin by hash anyway:
+          # compare the release asset's own digest — GitHub computes it at
+          # upload — against the value recorded here. A replaced asset fails
+          # here rather than quietly becoming the compiler we build with.
+          published="$(gh api "repos/haskell-wasm/ghc-wasm-bindists/releases/tags/$GHC_WASM_BINDIST_TAG" \
+            --jq '.assets[] | select(.name == "wasm32-wasi-ghc-9.10.tar.xz") | .digest')"
+          if [ "sha256:$GHC_WASM_BINDIST_SHA256" != "$published" ]; then
+            echo "::error::bindist digest is '$published', expected 'sha256:$GHC_WASM_BINDIST_SHA256'"
+            exit 1
+          fi
+
           FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 
-          # setup.sh leaves the bindist it installed from behind, so check the
-          # bytes it actually used and not merely the URL we asked for.
-          echo "$GHC_WASM_BINDIST_SHA256  wasm32-wasi-ghc.tar.xz" | sha256sum -c -
+      # Deliberately before the real build, and the most informative step in this
+      # workflow: if the published toolchain cannot compile a one-line program,
+      # then it cannot compile any Haskell and the fault is not our cabal
+      # invocation. It also prints the compiler, its C toolchain and its boot
+      # library versions, because `base`/`text` decide whether hadolint's bounds
+      # are even satisfiable.
+      - name: Probe Toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          source ~/.ghc-wasm/env
+
+          echo "::group::which"
+          for tool in ghc wasm32-wasi-ghc wasm32-wasi-ghc-pkg wasm32-wasi-cabal clang wasm32-wasi-clang wasmtime; do
+            printf '%-22s %s\n' "$tool" "$(command -v "$tool" || echo '(absent)')"
+          done
+          echo "::endgroup::"
+
+          libdir="$(wasm32-wasi-ghc --print-libdir)"
+          echo "wasm32-wasi-ghc: $(wasm32-wasi-ghc --version)"
+          echo "libdir:          $libdir"
+
+          echo "::group::settings (the C toolchain it will actually drive)"
+          grep -E '^("C compiler command"|"cc"|"ld command"|"ar command"|"target platform")' \
+            "$libdir/settings" || true
+          echo "::endgroup::"
+
+          echo "::group::boot libraries"
+          wasm32-wasi-ghc-pkg list --simple-output 2> /dev/null \
+            | tr ' ' '\n' | grep -E '^(base|text|bytestring|containers)-' || true
+          echo "::endgroup::"
+
+          echo "::group::hello world"
+          printf 'main = putStrLn "hi"\n' > /tmp/hello.hs
+          wasm32-wasi-ghc /tmp/hello.hs -o /tmp/hello.wasm
+          ls -l /tmp/hello.wasm
+          if command -v wasmtime > /dev/null; then
+            wasmtime /tmp/hello.wasm
+          else
+            echo "wasmtime is not on PATH, not running it"
+          fi
+          echo "::endgroup::"
 
       - name: Build hadolint.wasm
         if: steps.cache.outputs.cache-hit != 'true'
