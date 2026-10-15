@@ -73,16 +73,49 @@ package keeps fetching its own artifact rather than a newer binary.
 
 The digest is read from the `.sha256` published beside the artifact, and a
 mismatch is a hard error. It is deliberately **not** a constant in the script,
-because the build is not byte-reproducible: two builds of the same commit and
-toolchain produced `82168e5…` and `64c2c74…`. A constant would therefore be
-wrong the moment the binary is rebuilt, which is every publish.
+because the build is not byte-reproducible. Two builds of the same commit and
+toolchain produced `82168e57a1dd722bfde49090849b75c26f58124e5a5f31cffdaf4200bcf9ab2c`
+and `64c2c74407a5a91750c2f82b79ea82e3d5a3e8d8449d5b45b3a664819bc872a9`.
 
-What that buys: corruption, truncation or a partially uploaded asset is caught.
-What it does not buy: someone able to replace both files in the release. Origin
-is covered separately by the build provenance attestation:
+That is not the Hackage index moving underneath the build: both runs recorded
+the same index-state (`2026-10-15T11:34:24Z`), resolved the same versions of
+every dependency, and `wasm-opt` is deterministic — repeated `-Oz --converge`
+runs on one input give one digest. The two artifacts are the same size to within
+two bytes and differ across the whole code section, so the nondeterminism is
+GHC's own. Pinning `index-state` would not fix it.
+
+**What the digest guarantees:** corruption, truncation or a partially uploaded
+asset is caught, and an artifact that does not match what was published is
+refused.
+
+**What it does not guarantee:** anyone able to replace both the artifact and its
+`.sha256` in the release. That is what the provenance attestation is for, and
+why both exist:
 
 ```sh
 gh attestation verify hadolint.wasm -R wasmio/dlintr
+```
+
+## Two traps in this repository
+
+Both cost a cycle each. They are unrelated to each other and to wasm.
+
+**Declaring `permissions` on a job sets every scope it does not name to `none`.**
+Dropping `contents: write` from the wasm job therefore left it with no `contents`
+at all, and `actions/checkout` needs `contents: read`. A called workflow cannot
+be granted a scope its caller denied, so the entire run died at **startup** —
+`conclusion: startup_failure` with zero jobs, no log, and no annotation. If a
+run is `startup_failure` with `total_count: 0`, look at permissions before
+anything else. Keep `contents: read` on these jobs.
+
+**`git add -A` and `git add -u` read an uninitialised submodule as deleted**, and
+stage its removal, so a commit can silently drop the gitlink. That happened
+once here. If `hadolint/` is not checked out, use `git add <paths>` rather than
+`-A`/`-u`, or initialise it first:
+
+```sh
+git submodule update --init
+git ls-files -s hadolint # expect a 160000 entry
 ```
 
 ## Building locally
