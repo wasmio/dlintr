@@ -44,6 +44,24 @@ jobs:
       contents: write # publishing to the release, on manual dispatch
       id-token: write # provenance signing
       attestations: write
+    env:
+      # Pinned known-good toolchain. The channel default cannot build hadolint at
+      # all: GHC emits ELF-flavoured assembly for the `Diff` dependency
+      # (`.section .text,"ax",@progbits`) and wasm32-wasi-clang rejects it with
+      # "Wasm doesn't support data symbols in text sections".
+      #
+      # `setup.sh` reads the bindist URL out of `autogen.json` in whichever
+      # ghc-wasm-meta revision it runs from, so pinning the revision is what
+      # pins the compiler *and* the clang it was built against. Master has moved
+      # on to a newer bindist, hence naming a revision at all.
+      GHC_WASM_META_REV: 60098a50
+      GHC_WASM_BINDIST_URL: https://github.com/haskell-wasm/ghc-wasm-bindists/releases/download/20260403T135157/wasm32-wasi-ghc-9.10.tar.xz
+      GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
+      # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
+      # a floating one would make the digest pinned in the package meaningless.
+      BINARYEN_URL: https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+      BINARYEN_DIR: binaryen-version_133
+      BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -84,6 +102,7 @@ jobs:
             gcc \
             git \
             gzip \
+            jq \
             libc-dev \
             libffi-dev \
             libgmp-dev \
@@ -98,51 +117,61 @@ jobs:
             zlib1g \
             zlib1g-dev
 
-      # Pinned, and its digest checked: the optimiser is what decides the bytes
-      # of the artifact, so leaving it floating would make the pinned digest of
-      # the result meaningless.
-      - name: Install binaryen 133
+      - name: Install binaryen
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL -o binaryen.tar.gz \
-            https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  binaryen.tar.gz" | sha256sum -c -
+          curl -fsSL -o binaryen.tar.gz "$BINARYEN_URL"
+          echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
           tar xzf binaryen.tar.gz
-          echo "$PWD/binaryen-version_133/bin" >> "$GITHUB_PATH"
+          echo "$PWD/$BINARYEN_DIR/bin" >> "$GITHUB_PATH"
 
-      - name: Install ghc-wasm-meta release channel
-        id: ghc-wasm
+      - name: Install pinned GHC wasm toolchain
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
+          # Fail legibly if the pinned bindist has been retired — it is a release
+          # asset and can be deleted. Deliberately no fallback: the channel
+          # default is the compiler that cannot build hadolint.
+          curl -fsIL --retry 3 "$GHC_WASM_BINDIST_URL" > /dev/null || {
+            echo "::error::the pinned GHC wasm bindist is gone: $GHC_WASM_BINDIST_URL"
+            echo "::error::re-pin deliberately rather than falling back to the channel default"
+            exit 1
+          }
 
-          # ghc-wasm-meta retires old bindists, so the date-stamped version that
-          # hadolint's own workflow names goes stale and stops resolving. Take
-          # the current 9.10.3 build off the release channel instead of naming
-          # one; the major version is what hadolint.cabal's bounds care about.
-          GHC_VERSION="$(grep -rE '^[[:space:]]{4}wasm32-wasi-9\.10\.3.*:' ghc-wasm-meta/ghcup-wasm-0.0.9.yaml | tr -d ' :')"
-          test -n "$GHC_VERSION"
-          echo "ghc_version=$GHC_VERSION" >> "$GITHUB_OUTPUT"
+          # A full clone: the pin is a specific older revision.
+          git clone https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
+          git -C ghc-wasm-meta checkout "$GHC_WASM_META_REV"
 
-          SKIP_GHC=1 ghc-wasm-meta/setup.sh
-          source ~/.ghc-wasm/env
-          ghcup config add-release-channel \
-            https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/raw/master/ghcup-wasm-0.0.9.yaml
+          # `setup.sh` is driven entirely by this file, so check the revision
+          # agrees with us before spending ten minutes installing.
+          actual="$(jq -r '."wasm32-wasi-ghc-9.10".url' ghc-wasm-meta/autogen.json)"
+          if [ "$actual" != "$GHC_WASM_BINDIST_URL" ]; then
+            echo "::error::ghc-wasm-meta@$GHC_WASM_META_REV pins $actual, expected $GHC_WASM_BINDIST_URL"
+            exit 1
+          fi
 
-          # The same cabal and GHC configure arguments hadolint's own wasm job
-          # uses, so the dependency bounds in hadolint.cabal are known to hold.
-          ghcup install cabal --set 3.14.2.0
-          ghcup install ghc --set "$GHC_VERSION" -- \
-            --host=x86_64-linux \
-            --with-intree-gmp \
-            --with-system-libffi
+          FLAVOUR=9.10 ghc-wasm-meta/setup.sh
+
+          # setup.sh leaves the bindist it installed from behind, so check the
+          # bytes it actually used and not merely the URL we asked for.
+          echo "$GHC_WASM_BINDIST_SHA256  wasm32-wasi-ghc.tar.xz" | sha256sum -c -
 
       - name: Build hadolint.wasm
         if: steps.cache.outputs.cache-hit != 'true'
-        env:
-          GHC_WASM_VERSION: ${{ steps.ghc-wasm.outputs.ghc_version }}
         run: |
           source ~/.ghc-wasm/env
+
+          # setup.sh installs a binaryen of its own from the same autogen.json;
+          # put the pinned one first so the artifact's bytes stay reproducible.
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          wasm-opt --version
+          case "$(wasm-opt --version)" in
+            *"version 133"*) ;;
+            *)
+              echo "::error::expected the pinned wasm-opt 133, got: $(wasm-opt --version)"
+              exit 1
+              ;;
+          esac
+
           bash wasm/build.sh
 
       # A module that links but cannot start is the failure worth catching, so

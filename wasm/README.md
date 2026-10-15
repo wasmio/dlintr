@@ -57,13 +57,28 @@ itself.
 
 ## Building locally
 
-`build.sh` needs the GHC wasm toolchain on `PATH`, plus `cabal` and `wasm-opt`.
-The versions CI uses are pinned in `.github/workflows/wasm.yml`; the toolchain
-is distributed by
-[`ghc-wasm-meta`](https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta):
+`build.sh` needs the GHC wasm toolchain on `PATH` (which brings
+`wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
+authority on versions; in short it pins
+
+|                          |                                                                         |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `ghc-wasm-meta` revision | names the bindist URL, so it pins the compiler and its `clang` together |
+| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against a SHA-256                       |
+| `wasm-opt`               | binaryen 133, checked against a SHA-256                                 |
+
+**Do not just use `ghc-wasm-meta`'s current channel default.** It installs a
+newer bindist that cannot build hadolint at all: GHC emits ELF-flavoured
+assembly for the `Diff` dependency and `wasm32-wasi-clang` rejects it with
+`Wasm doesn't support data symbols in text sections`. The pinned bindist is an
+older one; it is a normal GitHub release asset rather than a CI artifact, so it
+does not expire, but it can be deleted, which is why the workflow fails loudly
+on a 404 instead of falling back.
 
 ```sh
-curl https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/raw/master/bootstrap.sh | sh
+git clone https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
+git -C ghc-wasm-meta checkout <the revision pinned in wasm.yml>
+FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 source ~/.ghc-wasm/env
 
 git submodule update --init

@@ -9,9 +9,9 @@
 # upstream publishes to GitHub Pages, which is a JSFFI *reactor* wired to the
 # website's DOM (`#lint`, `#dockerfile__code`).
 #
-# Requires the GHC wasm toolchain on PATH (`source ~/.ghc-wasm/env`), a `cabal`,
-# and `wasm-opt`. `.github/workflows/wasm.yml` installs all three at pinned
-# versions; `wasm/README.md` describes the local equivalent.
+# Requires the GHC wasm toolchain on PATH (`source ~/.ghc-wasm/env`), which
+# brings `wasm32-wasi-cabal`, plus `wasm-opt`. `.github/workflows/wasm.yml`
+# installs both at pinned versions; `wasm/README.md` describes the local case.
 #
 # Usage: wasm/build.sh [output.wasm]
 set -euo pipefail
@@ -26,9 +26,14 @@ if [ ! -f "$source_dir/hadolint.cabal" ]; then
   exit 1
 fi
 
-for tool in cabal wasm-opt; do
+# `wasm32-wasi-cabal` is ghc-wasm-meta's own wrapper: it pins
+# --with-compiler/--with-hc-pkg/--with-hsc2hs/--with-haddock at the wasm
+# toolchain, so Cabal never reaches for a native ghc. Everything the ghcup-based
+# flow needed on top of that (PATH juggling, symlinking ghc into ~/.ghcup) is
+# unnecessary here, because the wasm toolchain is the only one installed.
+for tool in wasm32-wasi-cabal wasm-opt; do
   command -v "$tool" > /dev/null || {
-    echo "wasm: $tool not found on PATH" >&2
+    echo "wasm: $tool not found on PATH — did you 'source ~/.ghc-wasm/env'?" >&2
     exit 1
   }
 done
@@ -52,57 +57,10 @@ if [ "$applied" = 1 ]; then
   trap 'git -C "$source_dir" checkout -- hadolint.cabal' EXIT
 fi
 
-# Resolve the wasm cross compiler. `source ~/.ghc-wasm/env` puts it on PATH, so
-# preferring that avoids `ghcup whereis ghc` — unversioned, it resolves against
-# ghcup's *native* ghc and fails, and a failed command substitution does not
-# trip `set -e`, so the path silently collapses to the filesystem root. The
-# versioned form is a fallback, and the guard below refuses to continue without
-# a real compiler either way.
-ghc_bin="${GHC_WASM_BIN:-}"
-if [ -z "$ghc_bin" ] && command -v wasm32-wasi-ghc > /dev/null 2>&1; then
-  ghc_bin="$(dirname "$(command -v wasm32-wasi-ghc)")"
-fi
-if [ -z "$ghc_bin" ] && [ -n "${GHC_WASM_VERSION:-}" ] && command -v ghcup > /dev/null 2>&1; then
-  prefix="$(ghcup whereis ghc "$GHC_WASM_VERSION" 2> /dev/null || true)"
-  [ -n "$prefix" ] && ghc_bin="$prefix/bin"
-fi
-
-if [ -z "$ghc_bin" ] || [ ! -x "$ghc_bin/wasm32-wasi-ghc" ]; then
-  echo "wasm: wasm32-wasi-ghc not found${ghc_bin:+ in $ghc_bin}" >&2
-  echo "wasm: source ~/.ghc-wasm/env, or set GHC_WASM_VERSION / GHC_WASM_BIN" >&2
-  exit 1
-fi
-
-# Upstream's wasm job also installs the wasm tools under their plain names.
-# Cabal otherwise reaches for the *native* ghc and ghc-pkg, which then fail on
-# wasm32-wasi targets. `--with-*` below is the documented way to do this; the
-# symlinks are the belt-and-braces upstream needed.
-ghcup_bin="/usr/local/.ghcup/bin"
-if [ -d "$ghcup_bin" ]; then
-  for tool in ghc ghc-pkg hsc2hs haddock; do
-    link="$ghcup_bin/$tool"
-    if [ -w "$ghcup_bin" ]; then
-      ln -sf "$ghc_bin/wasm32-wasi-$tool" "$link"
-    else
-      sudo -n ln -sf "$ghc_bin/wasm32-wasi-$tool" "$link" 2> /dev/null || true
-    fi
-  done
-  export PATH="$ghcup_bin:$PATH"
-fi
-export PATH="$ghc_bin:$PATH"
-
-cabal_args=(
-  --with-compiler="$ghc_bin/wasm32-wasi-ghc"
-  --with-hc-pkg="$ghc_bin/wasm32-wasi-ghc-pkg"
-  --with-hsc2hs="$ghc_bin/wasm32-wasi-hsc2hs"
-  --with-haddock="$ghc_bin/wasm32-wasi-haddock"
-)
-
-cabal update
 (
   cd "$source_dir"
-  cabal "${cabal_args[@]}" build exe:hadolint
-  cabal "${cabal_args[@]}" list-bin exe:hadolint
+  wasm32-wasi-cabal build exe:hadolint
+  wasm32-wasi-cabal list-bin exe:hadolint
 ) | tee /tmp/wasm-bin.txt >&2
 bin="$(tail -n 1 /tmp/wasm-bin.txt)"
 
