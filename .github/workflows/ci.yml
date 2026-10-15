@@ -34,6 +34,10 @@ jobs:
     # missing, the download below fails and says so.
     if: always()
     strategy:
+      # One failing job cancelled the other eleven, so a single platform could
+      # hide every other one — including whether the format-equality test runs
+      # at all. The whole matrix is the evidence, so let it finish.
+      fail-fast: false
       matrix:
         node:
           - 20

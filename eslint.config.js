@@ -12,6 +12,7 @@ export default [
       // it apart from source that should be linted.
       '**/*.wasm',
       '**/*.sha256',
+      'ghc_wasm_jsffi.js',
       'lib',
       'pnpm-lock.yaml',
       // The pinned hadolint checkout; its website assets are not ours to lint.
