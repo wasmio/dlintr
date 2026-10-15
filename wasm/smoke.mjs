@@ -65,6 +65,13 @@ const run = (args, { stdin = '', workdir } = {}) => {
     })
     const exitCode = wasi.start(instance) ?? 0
 
+    // Read back by path rather than through the descriptors handed to WASI:
+    // `node:wasi` closes those, so they cannot be reused. Re-opening is what a
+    // filesystem-race query flags, and it is accepted here rather than
+    // suppressed blind — `scratch` comes from `mkdtempSync`, so its name is
+    // unique and its permissions are 0700, and an attacker in a position to swap
+    // these files could already write into this process's private temp
+    // directory. There is no meaningful window to close.
     return {
       exitCode,
       stdout: readFileSync(stdoutPath, 'utf8'),
