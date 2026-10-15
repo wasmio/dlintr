@@ -21,7 +21,9 @@ import Data.Sequence (singleton)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
-import GHC.Wasm.Prim (JSString, fromJSString, toJSString)
+-- GHC-72317: `JSString` is only marshallable when its constructor is in
+-- scope, so the `(..)` is load-bearing, not decoration.
+import GHC.Wasm.Prim (JSString (..), fromJSString, toJSString)
 import qualified Hadolint
 import qualified Hadolint.Config as Config
 import qualified Hadolint.Formatter.Format as Format
@@ -44,7 +46,7 @@ foreign export javascript "version" version :: IO JSString
 
 -- | The hadolint version string, exactly as the CLI's @--version@ prints it.
 version :: IO JSString
-version = toJSString Hadolint.getVersion
+version = pure (toJSString Hadolint.getVersion)
 
 foreign export javascript "lint" lint :: JSString -> IO JSString
 
@@ -58,7 +60,7 @@ lint :: JSString -> IO JSString
 lint source = do
   fromEnvironment <- Config.getConfigFromEnvironment
   let config = Config.applyPartialConfiguration def fromEnvironment
-  pure . toJSString . Encoding.decodeUtf8 . B.toStrict . render $
+  pure . toJSString . Text.unpack . Encoding.decodeUtf8 . B.toStrict . render $
     analyse config (Docker.parseText (Text.pack (fromJSString source)))
 
 analyse :: Config.Configuration -> Either Error Dockerfile -> Format.Result Text DockerfileError

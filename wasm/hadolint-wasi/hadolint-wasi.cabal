@@ -13,7 +13,11 @@ executable hadolint-wasi
   main-is:          Main.hs
   -- `toJSON (JsonCheck file CheckFailure {..})`, as upstream's own JSON
   -- formatter writes it. GHC-37132 without this.
-  default-extensions: RecordWildCards
+  -- `OverloadedStrings` for aeson 2, whose `(.=)` takes a `Key` and not a
+  -- `String`; upstream's own formatter has it for the same reason.
+  default-extensions:
+    OverloadedStrings
+    RecordWildCards
   hs-source-dirs:   .
   default-language: GHC2021
 
