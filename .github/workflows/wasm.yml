@@ -311,6 +311,12 @@ jobs:
         run: |
           digest="$(sha256sum hadolint.wasm | tee hadolint.wasm.sha256 | cut -d' ' -f1)"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          # Echoed, not just summarized: the build is not byte-reproducible, so
+          # every run ships a different binary. When one of them crashes a
+          # platform, the digest is the only thing that ties the crash to an
+          # artifact — and a step summary is not greppable after the fact, which
+          # is exactly how a crashing binary became unidentifiable once already.
+          echo "hadolint.wasm sha256: $digest"
           # The submodule clone here carries no tags, so `git describe` fails;
           # the cabal file is the authoritative version anyway.
           revision="v$(sed -n "s/^version: *//p" hadolint/hadolint.cabal | head -1)"
