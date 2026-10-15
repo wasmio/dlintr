@@ -148,8 +148,18 @@ jobs:
             zlib1g \
             zlib1g-dev
 
+      # Deliberately unguarded, even on a toolchain cache hit. The cached
+      # directories are `~/.ghc-wasm`, `~/.ghcup` and `~/.cabal`; binaryen is
+      # extracted into the *workspace*, so a hit would skip the download, leave
+      # `$PWD/${BINARYEN_DIR}` absent, and let the build's `export PATH` fall
+      # through to the binaryen `setup.sh` ships inside `~/.ghc-wasm` — version
+      # 129 at this revision, not 133.
+      #
+      # That is the invariant: a step whose output lives outside the cached
+      # paths must never be skipped on a hit. Skipping it here did not fail
+      # loudly; it failed at the version assertion much later, and would have
+      # been invisible without it.
       - name: Install binaryen
-        if: steps.toolchain.outputs.cache-hit != 'true'
         run: |
           curl -fsSL -o binaryen.tar.gz "$BINARYEN_URL"
           echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
