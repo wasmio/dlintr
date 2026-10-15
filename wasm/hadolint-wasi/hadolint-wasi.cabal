@@ -11,6 +11,9 @@ build-type:         Simple
 
 executable hadolint-wasi
   main-is:          Main.hs
+  -- `toJSON (JsonCheck file CheckFailure {..})`, as upstream's own JSON
+  -- formatter writes it. GHC-37132 without this.
+  default-extensions: RecordWildCards
   hs-source-dirs:   .
   default-language: GHC2021
 

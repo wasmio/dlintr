@@ -243,23 +243,6 @@ jobs:
 
           bash wasm/build.sh
 
-      # The reactor — `lint(text)`, not a process to pipe stdin into — is what
-      # the runtime will call. Its wrapper has never been compiled, because
-      # nothing here can compile Haskell outside CI, so this step exists purely
-      # to find out whether the Haskell is valid.
-      #
-      # `continue-on-error` because nothing consumes it yet: the command build
-      # above still carries the test suite, and a reactor that does not compile
-      # should not stop that. It becomes a hard failure in the same commit that
-      # flips the runtime onto it.
-      - name: Build the reactor (unverified wrapper)
-        if: steps.cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          source ~/.ghc-wasm/env
-          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
-          bash wasm/build-reactor.sh hadolint-reactor.wasm ghc_wasm_jsffi.js
-
       # A module that links but cannot start is the failure worth catching, so
       # this really runs it. See wasm/smoke.mjs.
       - name: Smoke Test
@@ -302,6 +285,21 @@ jobs:
             hadolint.wasm
             hadolint.wasm.sha256
           if-no-files-found: error
+
+      # Deliberately last, and deliberately fatal. It runs after the command
+      # artifact is uploaded, so a compile error here still leaves that artifact
+      # for `ci` to test — `ci` runs with `if: always()` for exactly that reason
+      # — while the error itself is a red run instead of a tolerated step.
+      #
+      # It was `continue-on-error` for one run and that was a mistake: the step
+      # reported `success`, the artifact upload quietly found no files, and the
+      # only trace was in the log. Do not put it back.
+      - name: Build the reactor
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          source ~/.ghc-wasm/env
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          bash wasm/build-reactor.sh hadolint-reactor.wasm ghc_wasm_jsffi.js
 
       # Separate artifact, and tolerated absent: the reactor is not consumed
       # yet, and its build is allowed to fail above.

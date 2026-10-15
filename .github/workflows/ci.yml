@@ -27,6 +27,12 @@ jobs:
   ci:
     name: Lint and Test with Node.js ${{ matrix.node }} on ${{ matrix.os }}
     needs: wasm
+    # The `wasm` job builds the command artifact first and the reactor last, and
+    # only the reactor is allowed to fail the job. `always()` keeps the suite
+    # running against the artifact that was already uploaded, rather than a
+    # reactor compile error skipping every test. If the artifact genuinely is
+    # missing, the download below fails and says so.
+    if: always()
     strategy:
       matrix:
         node:
