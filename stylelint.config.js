@@ -22,6 +22,6 @@ export default {
     'hadolint.wasm.sha256',
     'lib/**',
     // The pinned hadolint checkout ships its own website CSS.
-    'vendor/**',
+    'hadolint/**',
   ],
 }

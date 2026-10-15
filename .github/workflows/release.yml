@@ -9,8 +9,49 @@ permissions:
   contents: read
 
 jobs:
+  # `changesets/action` publishes only when no changesets are left, which is
+  # what a merged version PR looks like; otherwise it opens that PR. The wasm is
+  # needed for the first case and not the second, and it takes a toolchain
+  # install to produce, so decide before spending anything on it.
+  detect:
+    name: Is this a publish?
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for unreleased changesets
+        id: check
+        run: |
+          if compgen -G '.changeset/*.md' | grep -qv 'README.md'; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The binary has to exist before `pnpm release` runs, because `pnpm build`
+  # packs it into the npm tarball. So build it here rather than downloading it
+  # from a release that does not exist yet — the tag for this version is created
+  # by the very step below.
+  wasm:
+    name: Build hadolint.wasm
+    needs: detect
+    if: needs.detect.outputs.publish == 'true'
+    permissions:
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/wasm.yml
+
   release:
     name: Release
+    needs:
+      - detect
+      - wasm
+    # `always()` because a skipped `wasm` — the version-PR path — must not skip
+    # the release, which is the case that does not need a binary at all.
+    if: always() && needs.detect.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -22,6 +63,12 @@ jobs:
         with:
           # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
           fetch-depth: 0
+
+      - name: Download hadolint.wasm
+        if: needs.wasm.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hadolint-wasm
 
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -35,10 +82,33 @@ jobs:
       - name: Install Dependencies
         run: pnpm i
 
+      # `pnpm release` runs the `prerelease` hook, which is `pnpm build`, which
+      # packs `hadolint.wasm`. On the publish path it is already here, so say so
+      # instead of letting the downloader look for a release that does not exist
+      # yet. Left empty on the version-PR path, where nothing is packed — that
+      # way a publish that somehow lost its artifact fails loudly rather than
+      # shipping a package with no binary in it.
       - name: Create Release Pull Request or Publish to npm
+        id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        env:
+          HADOLINT_WASM_SKIP_FETCH: ${{ needs.wasm.result == 'success' && '1' || '' }}
         with:
           publish-script: pnpm release
           version-script: pnpm run version
           commit-message: 'chore: release dlintr'
           pr-title: 'chore: release dlintr'
+
+      # Attach the binary to the release changesets just created, so that
+      # `scripts/hadolint-wasm.mjs` can fetch it for this version. Changesets
+      # tags `v<version>`; the URL is derived from the package version, so an
+      # older package keeps fetching its own artifact.
+      - name: Attach hadolint.wasm to the release
+        if: steps.changesets.outputs.published == 'true' && needs.wasm.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          tag="v$(node -p 'JSON.parse(process.env.PUBLISHED)[0].version')"
+          echo "attaching to $tag"
+          gh release upload "$tag" hadolint.wasm hadolint.wasm.sha256 --clobber

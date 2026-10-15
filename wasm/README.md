@@ -10,15 +10,13 @@ the only thing in the published package that is not source.
 There is one source, and it is this repository:
 
 1. `wasm/build.sh` builds hadolint's CLI (`exe:hadolint`) for `wasm32-wasi` out
-   of the `vendor/hadolint` submodule, which is pinned to a release tag.
-2. The `WASM` workflow runs that, smoke-tests the result, and — on manual
-   dispatch with `publish` — attaches `hadolint.wasm` and its `.sha256` to the
-   `hadolint-wasm` release.
-3. `scripts/hadolint-wasm.mjs` fetches that asset and verifies the digest
-   pinned in `HADOLINT_SHA256`.
-
-The digest is the pin, not the URL: a re-published or replaced asset fails
-verification rather than being silently accepted.
+   of the `hadolint` submodule, which is pinned to a release tag.
+2. The `WASM` workflow runs that, smoke-tests the result, and uploads it as a
+   workflow artifact. `release.yml` attaches `hadolint.wasm` and its `.sha256`
+   to the release changesets creates.
+3. `scripts/hadolint-wasm.mjs` fetches that asset for this package's version and
+   verifies it against the digest published beside it — see
+   [the digest](#the-digest) for why that is not a constant in the script.
 
 ### Why not upstream's own wasm build
 
@@ -32,49 +30,60 @@ This package needs a WASI _command_ — imports `wasi_snapshot_preview1`, export
 Upstream also marks `exe:hadolint` as `buildable: False` on wasm32 and passes it
 `-threaded`, which wasm32-wasi cannot link.
 `wasm/hadolint-wasm32-cli.patch` lifts both. It is pinned to the submodule
-commit and **must be rebased whenever `vendor/hadolint` moves**; `build.sh`
+commit and **must be rebased whenever `hadolint` moves**; `build.sh`
 fails loudly if it stops applying.
 
 ## Bootstrapping
 
-A fresh checkout has no `hadolint.wasm` and nothing published to fetch it from,
-so the first successful run is:
+A fresh checkout has no `hadolint.wasm` and no release to fetch it from, so the
+first run that carries one is:
 
 1. Push a branch containing these changes. The `CI` workflow's `wasm` job calls
    the reusable `WASM` workflow, builds the binary, and hands the artifact to
    the test matrix in the same run — that path needs nothing published.
-2. Once that build is green, run the `WASM` workflow manually with
-   `publish: true`. It creates the release described below and uploads
-   `hadolint.wasm` and `hadolint.wasm.sha256`.
-3. Copy the sha256 from that job's summary into `HADOLINT_SHA256` in
-   `scripts/hadolint-wasm.mjs`. Until it is filled in, that script refuses to
-   download — there is nothing to verify a download against — which is why
-   `pretest` only works locally from step 3 onwards.
-4. Commit the digest.
+2. Merge, and let the normal changesets flow release. On the publish run,
+   `release.yml` builds the binary, `pnpm release` packs it into the npm tarball,
+   and the artifact is then attached to the `v<version>` release changesets
+   creates.
+3. From that point `pnpm test` on a clean checkout fetches and verifies it.
 
-From then on `pnpm test` on a clean checkout fetches and verifies the artifact
-itself.
+Until step 2 there is nothing to download. Local runs are unaffected if the file
+is already on disk; the downloader says so and carries on rather than failing.
 
 ## Publishing, and changesets
 
-Publishing is manual (`workflow_dispatch` with `publish: true`) and creates
-exactly one kind of release:
+There is no separate release and no manual publish step. `release.yml` uses the
+existing `changesets/action` flow and adds two things:
 
-|          |                                                                     |
-| -------- | ------------------------------------------------------------------- |
-| tag      | `wasm-hadolint-v2.15.1` — `wasm-hadolint-` plus the submodule's tag |
-| kind     | prerelease, so it never becomes the repository's "latest"           |
-| assets   | `hadolint.wasm`, `hadolint.wasm.sha256`                             |
-| contents | the wasm binary only; it never touches the package or its version   |
+|             |                                                                |
+| ----------- | -------------------------------------------------------------- |
+| when        | only on the publish path — i.e. when no changesets are pending |
+| builds      | the same reusable `WASM` workflow `ci.yml` uses                |
+| attaches to | the release changesets creates, tagged `v<version>`            |
+| assets      | `hadolint.wasm`, `hadolint.wasm.sha256`                        |
 
-The namespace is deliberately disjoint from the `dlintr@<version>` tags
-`changeset publish` creates, and this workflow does not tag, version or publish
-the package, so the changesets flow is unaffected. The tag is versioned rather
-than rolling so one URL always means one artifact: bumping hadolint means a new
-tag, and `WASM_RELEASE_TAG` in the workflow and `HADOLINT_URL` in
-`scripts/hadolint-wasm.mjs` move together. The publish step **fails** if the
-submodule and the tag disagree, rather than quietly putting a new binary behind
-the old URL.
+`changeset publish` is untouched: it still publishes to npm and still creates its
+own `v<version>` tag and release. All this adds is two assets to that release.
+
+`scripts/hadolint-wasm.mjs` derives the URL from this package's own version, so
+no tag is hand-edited per release and `releases/latest` is never used — an older
+package keeps fetching its own artifact rather than a newer binary.
+
+### The digest
+
+The digest is read from the `.sha256` published beside the artifact, and a
+mismatch is a hard error. It is deliberately **not** a constant in the script,
+because the build is not byte-reproducible: two builds of the same commit and
+toolchain produced `82168e5…` and `64c2c74…`. A constant would therefore be
+wrong the moment the binary is rebuilt, which is every publish.
+
+What that buys: corruption, truncation or a partially uploaded asset is caught.
+What it does not buy: someone able to replace both files in the release. Origin
+is covered separately by the build provenance attestation:
+
+```sh
+gh attestation verify hadolint.wasm -R wasmio/dlintr
+```
 
 ## Building locally
 
@@ -122,12 +131,14 @@ HADOLINT_WASM_SKIP_FETCH=1 pnpm test
 ## Updating hadolint
 
 ```sh
-cd vendor/hadolint
+cd hadolint
 git fetch --tags && git checkout v<new-version>
 cd ../..
 # rebase wasm/hadolint-wasm32-cli.patch onto the new hadolint.cabal if needed
-git add vendor/hadolint
+git add hadolint
 ```
 
-Then rebuild, publish, and update `HADOLINT_SHA256` as in
-[Bootstrapping](#bootstrapping).
+Then let the normal release flow carry it: the next publish run rebuilds the
+binary and attaches it to that release. Nothing needs editing in
+`scripts/hadolint-wasm.mjs` — the URL follows the package version and the digest
+is read from what was published.

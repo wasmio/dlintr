@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds hadolint's WASI CLI from the pinned `vendor/hadolint` submodule and
+# Builds hadolint's WASI CLI from the pinned `hadolint` submodule and
 # slims it with Binaryen.
 #
 # The output is a WASI preview1 *command* module: it imports
@@ -17,12 +17,12 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source_dir="$root/vendor/hadolint"
+source_dir="$root/hadolint"
 patch="$root/wasm/hadolint-wasm32-cli.patch"
 output="${1:-$root/hadolint.wasm}"
 
 if [ ! -f "$source_dir/hadolint.cabal" ]; then
-  echo "wasm: vendor/hadolint is empty — run 'git submodule update --init'" >&2
+  echo "wasm: hadolint is empty — run 'git submodule update --init'" >&2
   exit 1
 fi
 
@@ -46,7 +46,7 @@ if git -C "$source_dir" apply --check "$patch" 2> /dev/null; then
   git -C "$source_dir" apply "$patch"
   applied=1
 elif ! git -C "$source_dir" apply --reverse --check "$patch" 2> /dev/null; then
-  echo "wasm: wasm/hadolint-wasm32-cli.patch no longer applies to vendor/hadolint" >&2
+  echo "wasm: wasm/hadolint-wasm32-cli.patch no longer applies to hadolint" >&2
   echo "wasm: submodule is at $(git -C "$source_dir" rev-parse --short HEAD) — rebase the patch" >&2
   exit 1
 fi

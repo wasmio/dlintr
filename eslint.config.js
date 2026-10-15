@@ -14,7 +14,7 @@ export default [
       'lib',
       'pnpm-lock.yaml',
       // The pinned hadolint checkout; its website assets are not ours to lint.
-      'vendor',
+      'hadolint',
     ],
   },
   ...config,

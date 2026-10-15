@@ -29,7 +29,6 @@ jobs:
   wasm:
     name: Build hadolint.wasm
     permissions:
-      contents: write
       id-token: write
       attestations: write
     uses: ./.github/workflows/wasm.yml
