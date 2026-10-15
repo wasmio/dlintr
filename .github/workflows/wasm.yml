@@ -42,6 +42,7 @@ jobs:
     name: Build hadolint.wasm
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write # provenance signing
       attestations: write
     env:

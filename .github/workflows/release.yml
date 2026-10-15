@@ -40,6 +40,7 @@ jobs:
     needs: detect
     if: needs.detect.outputs.publish == 'true'
     permissions:
+      contents: read
       id-token: write
       attestations: write
     uses: ./.github/workflows/wasm.yml

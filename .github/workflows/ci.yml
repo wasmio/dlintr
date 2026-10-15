@@ -19,6 +19,7 @@ jobs:
     # a single job exists to show why. These are scoped to this job so that the
     # test matrix below keeps the workflow's default `contents: read`.
     permissions:
+      contents: read
       id-token: write # provenance signing
       attestations: write
     uses: ./.github/workflows/wasm.yml
