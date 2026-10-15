@@ -7,6 +7,7 @@ export default [
       'CHANGELOG.md',
       'coverage',
       'dist',
+      'hadolint-cli.wasm',
       'hadolint.wasm',
       // Both are build outputs the WASM workflow drops in the package root, and
       // the artifact download lands them there again in CI.

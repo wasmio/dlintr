@@ -20,6 +20,7 @@ export default {
     'coverage/**',
     'dist/**',
     'LICENSE',
+    'hadolint-cli.wasm',
     'hadolint.wasm',
     // The `.sha256` beside it is fetched by CI along with the binary; it is a
     // hex digest, which the CSS parser reports as `Unknown word`.
