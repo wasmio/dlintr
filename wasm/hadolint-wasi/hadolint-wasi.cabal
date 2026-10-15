@@ -13,11 +13,25 @@ executable hadolint-wasi
   main-is:          Main.hs
   -- `toJSON (JsonCheck file CheckFailure {..})`, as upstream's own JSON
   -- formatter writes it. GHC-37132 without this.
-  -- `OverloadedStrings` for aeson 2, whose `(.=)` takes a `Key` and not a
-  -- `String`; upstream's own formatter has it for the same reason.
+  -- The `library` stanza's list, mirrored deliberately.
+  --
+  -- `Hadolint.Formatter.Json` lives in that library and relies on this list
+  -- silently; `executable hadolint-embedded` has no `default-extensions` at all,
+  -- which is why copying from the wrong stanza cost two compile cycles here —
+  -- `RecordWildCards` for the `{..}` in a record pattern, then
+  -- `OverloadedStrings` for aeson 2's `(.=)`, which takes a `Key`.
+  -- Now all ten, so the third discovery is not left waiting.
   default-extensions:
+    DeriveAnyClass
+    DeriveGeneric
+    NamedFieldPuns
     OverloadedStrings
+    PatternSynonyms
     RecordWildCards
+    ScopedTypeVariables
+    StrictData
+    TemplateHaskell
+    TupleSections
   hs-source-dirs:   .
   default-language: GHC2021
 
