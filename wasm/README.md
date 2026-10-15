@@ -61,19 +61,24 @@ itself.
 `wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
 authority on versions; in short it pins
 
-|                          |                                                                         |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `ghc-wasm-meta` revision | names the bindist URL, so it pins the compiler and its `clang` together |
-| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against a SHA-256                       |
-| `wasm-opt`               | binaryen 133, checked against a SHA-256                                 |
+|                          |                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| `ghc-wasm-meta` revision | full commit hash; its `autogen.json` names the whole toolchain, so this pins it    |
+| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against the release asset's SHA-256 before install |
+| `wasm-opt`               | binaryen 133, checked against a SHA-256                                            |
 
-**Do not just use `ghc-wasm-meta`'s current channel default.** It installs a
-newer bindist that cannot build hadolint at all: GHC emits ELF-flavoured
-assembly for the `Diff` dependency and `wasm32-wasi-clang` rejects it with
-`Wasm doesn't support data symbols in text sections`. The pinned bindist is an
-older one; it is a normal GitHub release asset rather than a CI artifact, so it
-does not expire, but it can be deleted, which is why the workflow fails loudly
-on a 404 instead of falling back.
+**`setup.sh` must run without `SKIP_GHC`, and with `FLAVOUR=9.10`.**
+
+The bindist ships unconfigured, and it is `setup.sh`'s own
+`./configure --target=wasm32-wasi` that makes it a wasm compiler. Running
+`SKIP_GHC=1 setup.sh` and then configuring GHC yourself — as hadolint's own wasm
+job does — without `--target=wasm32-wasi` yields a GHC that _reports_ a wasm
+target while emitting x86-64 assembly. `wasm32-wasi-clang` then rejects it with
+`Wasm doesn't support data symbols in text sections`, because it is being handed
+`.section …,"ax",@progbits`.
+
+`FLAVOUR` must be `9.10` because the default is `9.14`, and hadolint requires
+`ghc-experimental >=9.1003 && <9.1201`, which 9.14 cannot satisfy.
 
 ```sh
 git clone https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git

@@ -51,18 +51,22 @@ jobs:
       id-token: write # provenance signing
       attestations: write
     env:
-      # Pinned known-good toolchain. The channel default cannot build hadolint at
-      # all: GHC emits ELF-flavoured assembly for the `Diff` dependency
-      # (`.section .text,"ax",@progbits`) and wasm32-wasi-clang rejects it with
-      # "Wasm doesn't support data symbols in text sections".
+      # `setup.sh` names the whole toolchain — GHC bindist, wasi-sdk, cabal,
+      # binaryen, wasmtime — in `autogen.json` of whichever ghc-wasm-meta
+      # revision it runs from, so a full commit hash pins all of it at once and
+      # makes that file immutable.
       #
-      # `setup.sh` reads the bindist URL out of `autogen.json` in whichever
-      # ghc-wasm-meta revision it runs from, so pinning the revision is what
-      # pins the compiler *and* the clang it was built against. Master has moved
-      # on to a newer bindist, hence naming a revision at all.
+      # `FLAVOUR=9.10` is load-bearing: the default is 9.14, and hadolint needs
+      # `ghc-experimental >=9.1003 && <9.1201`, which 9.14 cannot satisfy.
+      #
+      # Equally load-bearing: `setup.sh` must run *without* `SKIP_GHC`. The
+      # bindist ships unconfigured, and it is `setup.sh`'s own
+      # `./configure --target=wasm32-wasi` that turns it into a wasm compiler.
+      # Skip that step and you get a GHC which reports a wasm target while
+      # emitting x86-64 assembly, which the wasm assembler then rejects with
+      # "Wasm doesn't support data symbols in text sections" (`@progbits`).
       GHC_WASM_META_REV: 60098a5076557e327b326a1a3ba3b5fb4fec1e49
       GHC_WASM_BINDIST_TAG: 20260403T135157
-      GHC_WASM_BINDIST_URL: https://github.com/haskell-wasm/ghc-wasm-bindists/releases/download/20260403T135157/wasm32-wasi-ghc-9.10.tar.xz
       GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
       # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
       # a floating one would make the digest pinned in the package meaningless.
@@ -132,38 +136,21 @@ jobs:
           tar xzf binaryen.tar.gz
           echo "$PWD/$BINARYEN_DIR/bin" >> "$GITHUB_PATH"
 
-      - name: Install pinned GHC wasm toolchain
+      - name: Install GHC wasm toolchain
         if: steps.cache.outputs.cache-hit != 'true'
         env:
           # `gh api` below needs it; it is not picked up implicitly.
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Fail legibly if the pinned bindist has been retired — it is a release
-          # asset and can be deleted. Deliberately no fallback: the channel
-          # default is the compiler that cannot build hadolint.
-          curl -fsIL --retry 3 "$GHC_WASM_BINDIST_URL" > /dev/null || {
-            echo "::error::the pinned GHC wasm bindist is gone: $GHC_WASM_BINDIST_URL"
-            echo "::error::re-pin deliberately rather than falling back to the channel default"
-            exit 1
-          }
-
-          # A full clone: the pin is a specific older revision.
+          # A full clone: the pin is a specific revision.
           git clone https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
           git -C ghc-wasm-meta checkout "$GHC_WASM_META_REV"
 
-          # `setup.sh` is driven entirely by this file, so check the revision
-          # agrees with us before spending ten minutes installing.
-          actual="$(jq -r '."wasm32-wasi-ghc-9.10".url' ghc-wasm-meta/autogen.json)"
-          if [ "$actual" != "$GHC_WASM_BINDIST_URL" ]; then
-            echo "::error::ghc-wasm-meta@$GHC_WASM_META_REV pins $actual, expected $GHC_WASM_BINDIST_URL"
-            exit 1
-          fi
-
-          # `setup.sh` downloads into a `mktemp -d` that it deletes on exit, so
-          # the tarball cannot be hashed after the fact. Pin by hash anyway:
-          # compare the release asset's own digest — GitHub computes it at
-          # upload — against the value recorded here. A replaced asset fails
-          # here rather than quietly becoming the compiler we build with.
+          # `setup.sh` fetches the bindist into a `mktemp -d` that it deletes on
+          # exit, so the tarball cannot be hashed afterwards. Check the release
+          # asset's own digest before installing instead — GitHub computes it at
+          # upload, so a replaced asset fails here rather than quietly becoming
+          # the compiler we build with.
           published="$(gh api "repos/haskell-wasm/ghc-wasm-bindists/releases/tags/$GHC_WASM_BINDIST_TAG" \
             --jq '.assets[] | select(.name == "wasm32-wasi-ghc-9.10.tar.xz") | .digest')"
           if [ "sha256:$GHC_WASM_BINDIST_SHA256" != "$published" ]; then
@@ -171,6 +158,8 @@ jobs:
             exit 1
           fi
 
+          # No SKIP_GHC: this is the `./configure --target=wasm32-wasi` that turns
+          # the unconfigured bindist into a wasm compiler. See the env block.
           FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 
       # Deliberately before the real build, and the most informative step in this
