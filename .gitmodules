@@ -1,0 +1,3 @@
+[submodule "vendor/hadolint"]
+	path = vendor/hadolint
+	url = https://github.com/hadolint/hadolint.git

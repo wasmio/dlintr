@@ -5,14 +5,20 @@ export default {
   ignoreFiles: [
     '**/*.{cjs,cts,js,json,json5,jsonc,jsx,mjs,mts,ts,tsx}',
     '**/*.d.ts',
-    '*.log',
-    '*.patch',
-    '*.yaml',
-    '*.yml',
+    // These suffixes are never CSS, and the patterns are anchored so that they
+    // also cover nested files (`wasm/hadolint-wasm32-cli.patch`,
+    // `wasm/build.sh`); a bare `*.patch` only reached the repository root.
+    '**/*.log',
+    '**/*.patch',
+    '**/*.sh',
+    '**/*.yaml',
+    '**/*.yml',
     'coverage/**',
     'dist/**',
     'LICENSE',
     'hadolint.wasm',
     'lib/**',
+    // The pinned hadolint checkout ships its own website CSS.
+    'vendor/**',
   ],
 }

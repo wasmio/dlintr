@@ -10,6 +10,8 @@ export default [
       'hadolint.wasm',
       'lib',
       'pnpm-lock.yaml',
+      // The pinned hadolint checkout; its website assets are not ours to lint.
+      'vendor',
     ],
   },
   ...config,

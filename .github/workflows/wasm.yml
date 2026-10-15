@@ -1,0 +1,197 @@
+name: WASM
+
+# Builds `hadolint.wasm` from the `vendor/hadolint` submodule.
+#
+# This is the only place the binary comes from. It is `workflow_call`-able so
+# that `ci.yml` can obtain the artifact in the same run — a fresh checkout, and
+# a first ever CI run, therefore need no pre-existing release and no binary from
+# any other project. `workflow_dispatch` with `publish` puts the result on the
+# `hadolint-wasm` release, which is what developers' `pretest` fetches.
+#
+# The toolchain and the build are cached under a key derived from the submodule
+# commit and this recipe, so the expensive path runs when the inputs change and
+# not on every push.
+on:
+  workflow_call: {}
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload the result to the `hadolint-wasm` release
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/wasm.yml
+      - .gitmodules
+      - vendor/hadolint
+      - wasm/**
+
+# A build only matters if it is the newest one.
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build hadolint.wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # publishing to the release, on manual dispatch
+      id-token: write # provenance signing
+      attestations: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Submodule Revision
+        id: source
+        run: echo "revision=$(git -C vendor/hadolint rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Restores the GHC wasm toolchain, the Haskell dependency build and the
+      # artifact itself. A hit means this job only has to re-run the smoke test.
+      - name: Cache Toolchain and Build
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.ghc-wasm
+            ~/.ghcup
+            ~/.cabal
+            vendor/hadolint/dist-newstyle
+            hadolint.wasm
+          key: wasm-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('wasm/**', '.github/workflows/wasm.yml') }}
+
+      - name: Install System Dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-gold \
+            curl \
+            g++ \
+            gcc \
+            git \
+            gzip \
+            libc-dev \
+            libffi-dev \
+            libgmp-dev \
+            libncurses-dev \
+            make \
+            musl \
+            musl-dev \
+            musl-tools \
+            perl \
+            tar \
+            xz-utils \
+            zlib1g \
+            zlib1g-dev
+
+      # Pinned, and its digest checked: the optimiser is what decides the bytes
+      # of the artifact, so leaving it floating would make the pinned digest of
+      # the result meaningless.
+      - name: Install binaryen 133
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o binaryen.tar.gz \
+            https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  binaryen.tar.gz" | sha256sum -c -
+          tar xzf binaryen.tar.gz
+          echo "$PWD/binaryen-version_133/bin" >> "$GITHUB_PATH"
+
+      - name: Install ghc-wasm-meta release channel
+        id: ghc-wasm
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
+
+          # ghc-wasm-meta retires old bindists, so the date-stamped version that
+          # hadolint's own workflow names goes stale and stops resolving. Take
+          # the current 9.10.3 build off the release channel instead of naming
+          # one; the major version is what hadolint.cabal's bounds care about.
+          GHC_VERSION="$(grep -rE '^[[:space:]]{4}wasm32-wasi-9\.10\.3.*:' ghc-wasm-meta/ghcup-wasm-0.0.9.yaml | tr -d ' :')"
+          test -n "$GHC_VERSION"
+          echo "ghc_version=$GHC_VERSION" >> "$GITHUB_OUTPUT"
+
+          SKIP_GHC=1 ghc-wasm-meta/setup.sh
+          source ~/.ghc-wasm/env
+          ghcup config add-release-channel \
+            https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta/-/raw/master/ghcup-wasm-0.0.9.yaml
+
+          # The same cabal and GHC configure arguments hadolint's own wasm job
+          # uses, so the dependency bounds in hadolint.cabal are known to hold.
+          ghcup install cabal --set 3.14.2.0
+          ghcup install ghc --set "$GHC_VERSION" -- \
+            --host=x86_64-linux \
+            --with-intree-gmp \
+            --with-system-libffi
+
+      - name: Build hadolint.wasm
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GHC_WASM_VERSION: ${{ steps.ghc-wasm.outputs.ghc_version }}
+        run: |
+          source ~/.ghc-wasm/env
+          bash wasm/build.sh
+
+      # A module that links but cannot start is the failure worth catching, so
+      # this really runs it. See wasm/smoke.mjs.
+      - name: Smoke Test
+        run: node wasm/smoke.mjs hadolint.wasm
+
+      - name: Checksum
+        id: wasm
+        run: |
+          digest="$(sha256sum hadolint.wasm | tee hadolint.wasm.sha256 | cut -d' ' -f1)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          {
+            echo "### hadolint.wasm"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| hadolint | \`$(git -C vendor/hadolint describe --tags --always)\` |"
+            echo "| size | \`$(du -h hadolint.wasm | cut -f1)\` |"
+            echo "| sha256 | \`$digest\` |"
+            echo
+            echo "Put this sha256 in \`HADOLINT_SHA256\` in"
+            echo "\`scripts/hadolint-wasm.mjs\` after publishing, so that"
+            echo "\`pretest\` fetches a verified artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Fork pull requests get a read-only token, so signing is not available.
+      - name: Attest Build Provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: hadolint.wasm
+
+      - name: Upload WASM Artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hadolint-wasm
+          path: |
+            hadolint.wasm
+            hadolint.wasm.sha256
+          if-no-files-found: error
+
+      - name: Publish to the `hadolint-wasm` Release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view hadolint-wasm >/dev/null 2>&1 || gh release create hadolint-wasm \
+            --prerelease \
+            --title 'hadolint.wasm' \
+            --notes 'WASI builds of hadolint, produced by the WASM workflow. These are build artifacts, not releases of the package.'
+          gh release upload hadolint-wasm hadolint.wasm hadolint.wasm.sha256 --clobber
