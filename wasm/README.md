@@ -44,7 +44,7 @@ so the first successful run is:
    the reusable `WASM` workflow, builds the binary, and hands the artifact to
    the test matrix in the same run — that path needs nothing published.
 2. Once that build is green, run the `WASM` workflow manually with
-   `publish: true`. It creates the `hadolint-wasm` release and uploads
+   `publish: true`. It creates the release described below and uploads
    `hadolint.wasm` and `hadolint.wasm.sha256`.
 3. Copy the sha256 from that job's summary into `HADOLINT_SHA256` in
    `scripts/hadolint-wasm.mjs`. Until it is filled in, that script refuses to
@@ -54,6 +54,27 @@ so the first successful run is:
 
 From then on `pnpm test` on a clean checkout fetches and verifies the artifact
 itself.
+
+## Publishing, and changesets
+
+Publishing is manual (`workflow_dispatch` with `publish: true`) and creates
+exactly one kind of release:
+
+|          |                                                                     |
+| -------- | ------------------------------------------------------------------- |
+| tag      | `wasm-hadolint-v2.15.1` — `wasm-hadolint-` plus the submodule's tag |
+| kind     | prerelease, so it never becomes the repository's "latest"           |
+| assets   | `hadolint.wasm`, `hadolint.wasm.sha256`                             |
+| contents | the wasm binary only; it never touches the package or its version   |
+
+The namespace is deliberately disjoint from the `dlintr@<version>` tags
+`changeset publish` creates, and this workflow does not tag, version or publish
+the package, so the changesets flow is unaffected. The tag is versioned rather
+than rolling so one URL always means one artifact: bumping hadolint means a new
+tag, and `WASM_RELEASE_TAG` in the workflow and `HADOLINT_URL` in
+`scripts/hadolint-wasm.mjs` move together. The publish step **fails** if the
+submodule and the tag disagree, rather than quietly putting a new binary behind
+the old URL.
 
 ## Building locally
 

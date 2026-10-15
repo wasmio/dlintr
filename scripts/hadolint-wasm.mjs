@@ -28,9 +28,17 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/** Asset published by `.github/workflows/wasm.yml`. */
+/**
+ * Asset published by `.github/workflows/wasm.yml`.
+ *
+ * The tag names the hadolint version the artifact was built from, so one URL
+ * always means one artifact; `HADOLINT_SHA256` is still what decides whether a
+ * download is the binary we mean. Bumping the submodule means a new tag, a new
+ * URL here, and a new digest — the workflow refuses to publish if the tag and
+ * the submodule disagree.
+ */
 export const HADOLINT_URL =
-  'https://github.com/wasmio/dlintr/releases/download/hadolint-wasm/hadolint.wasm'
+  'https://github.com/wasmio/dlintr/releases/download/wasm-hadolint-v2.15.1/hadolint.wasm'
 
 /**
  * SHA-256 of the artifact at `HADOLINT_URL`.

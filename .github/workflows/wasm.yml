@@ -68,6 +68,12 @@ jobs:
       GHC_WASM_META_REV: 60098a5076557e327b326a1a3ba3b5fb4fec1e49
       GHC_WASM_BINDIST_TAG: 20260403T135157
       GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
+      # The one release this workflow creates. Namespaced away from the
+      # `dlintr@<version>` tags `changeset publish` makes, and versioned by the
+      # hadolint tag it was built from so a URL always means one artifact. It
+      # must match `HADOLINT_URL` in `scripts/hadolint-wasm.mjs`, and the publish
+      # step fails if the submodule has moved without both being updated.
+      WASM_RELEASE_TAG: wasm-hadolint-v2.15.1
       # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
       # a floating one would make the digest pinned in the package meaningless.
       BINARYEN_URL: https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
@@ -183,9 +189,12 @@ jobs:
           echo "wasm32-wasi-ghc: $(wasm32-wasi-ghc --version)"
           echo "libdir:          $libdir"
 
+          # `settings` is one long JSON-ish line, so split it on commas before
+          # grepping. Anchoring on `^` matched nothing at all the first time.
           echo "::group::settings (the C toolchain it will actually drive)"
-          grep -E '^("C compiler command"|"cc"|"ld command"|"ar command"|"target platform"|"C compiler flags"|"Cxx compiler flags"|"C preprocessor flags")' \
-            "$libdir/settings" || true
+          tr ',' '\n' < "$libdir/settings" \
+            | grep -E '"C compiler command"|"C compiler flags"|"Cxx compiler flags"|"ld command"|"ar command"|"target platform"' \
+            || true
           echo "::endgroup::"
 
           echo "::group::boot libraries"
@@ -254,18 +263,22 @@ jobs:
         run: |
           digest="$(sha256sum hadolint.wasm | tee hadolint.wasm.sha256 | cut -d' ' -f1)"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          revision="$(git -C vendor/hadolint describe --tags)"
           {
             echo "### hadolint.wasm"
             echo
             echo "| | |"
             echo "| --- | --- |"
-            echo "| hadolint | \`$(git -C vendor/hadolint describe --tags --always)\` |"
+            echo "| hadolint | \`$revision\` |"
             echo "| size | \`$(du -h hadolint.wasm | cut -f1)\` |"
             echo "| sha256 | \`$digest\` |"
+            echo "| release | \`$WASM_RELEASE_TAG\` |"
             echo
-            echo "Put this sha256 in \`HADOLINT_SHA256\` in"
-            echo "\`scripts/hadolint-wasm.mjs\` after publishing, so that"
-            echo "\`pretest\` fetches a verified artifact."
+            echo "Published, it lives at"
+            echo "\`https://github.com/${GITHUB_REPOSITORY}/releases/download/$WASM_RELEASE_TAG/hadolint.wasm\`."
+            echo
+            echo "Set \`HADOLINT_SHA256\` in \`scripts/hadolint-wasm.mjs\` to the sha256"
+            echo "above and that path becomes what the package verifies against."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Fork pull requests get a read-only token, so signing is not available.
@@ -284,13 +297,28 @@ jobs:
             hadolint.wasm.sha256
           if-no-files-found: error
 
-      - name: Publish to the `hadolint-wasm` Release
+      - name: Publish to the wasm Release
         if: github.event_name == 'workflow_dispatch' && inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view hadolint-wasm >/dev/null 2>&1 || gh release create hadolint-wasm \
-            --prerelease \
-            --title 'hadolint.wasm' \
-            --notes 'WASI builds of hadolint, produced by the WASM workflow. These are build artifacts, not releases of the package.'
-          gh release upload hadolint-wasm hadolint.wasm hadolint.wasm.sha256 --clobber
+          # The tag names the hadolint version the artifact was built from. If the
+          # submodule moves without `WASM_RELEASE_TAG` and the downloader's
+          # `HADOLINT_URL` moving with it, publishing would quietly put a new
+          # binary at the old URL — so refuse rather than do that.
+          revision="$(git -C vendor/hadolint describe --tags)"
+          if [ "wasm-hadolint-$revision" != "$WASM_RELEASE_TAG" ]; then
+            echo "::error::submodule is at $revision, so the tag should be wasm-hadolint-$revision, but WASM_RELEASE_TAG is $WASM_RELEASE_TAG"
+            echo "::error::update WASM_RELEASE_TAG here and HADOLINT_URL in scripts/hadolint-wasm.mjs together"
+            exit 1
+          fi
+
+          # A prerelease, so it never becomes the repository's "latest" and never
+          # competes with the release changesets manages.
+          gh release view "$WASM_RELEASE_TAG" > /dev/null 2>&1 \
+            || gh release create "$WASM_RELEASE_TAG" \
+              --prerelease \
+              --title "hadolint.wasm $revision" \
+              --notes "WASI build of hadolint $revision, produced by the WASM workflow. This is a build artifact, not a release of the package."
+
+          gh release upload "$WASM_RELEASE_TAG" hadolint.wasm hadolint.wasm.sha256 --clobber
