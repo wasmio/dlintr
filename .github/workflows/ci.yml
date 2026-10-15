@@ -34,10 +34,11 @@ jobs:
     # missing, the download below fails and says so.
     if: always()
     strategy:
-      # One failing job cancelled the other eleven, so a single platform could
-      # hide every other one — including whether the format-equality test runs
-      # at all. The whole matrix is the evidence, so let it finish.
-      fail-fast: false
+      # `fail-fast: false` stood here while the WASM matrix was being
+      # stabilised: a single failing job was cancelling the other eleven and
+      # hiding Windows, macOS and the remaining Node versions. It came out again
+      # once all twelve were green, because the default is what is wanted in
+      # normal operation.
       matrix:
         node:
           - 20
