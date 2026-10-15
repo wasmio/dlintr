@@ -5,8 +5,7 @@ dist
 lib
 /auto-imports.d.ts
 /pnpm-lock.yaml
-/hadolint-cli.wasm
-/hadolint.wasm
+*.wasm
+*.sha256
 /ghc_wasm_jsffi.js
-/hadolint.wasm.sha256
 /hadolint

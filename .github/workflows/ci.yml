@@ -49,8 +49,14 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Put `hadolint.wasm` in the package root, where the runtime and the tests
-      # expect it.
+      # Two artifacts into the package root: `hadolint.wasm` and its glue, which
+      # the runtime loads, and the command build the format test compares
+      # against. Both come from the same commit, which is the only thing that
+      # makes that comparison worth anything.
+      #
+      # Note for anyone reading these logs: `digest-mismatch: error` is this
+      # action echoing its own default input, not a failure. It has been mistaken
+      # for one twice.
       - name: Download hadolint.wasm
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

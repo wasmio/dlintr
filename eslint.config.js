@@ -7,11 +7,11 @@ export default [
       'CHANGELOG.md',
       'coverage',
       'dist',
-      'hadolint-cli.wasm',
-      'hadolint.wasm',
-      // Both are build outputs the WASM workflow drops in the package root, and
-      // the artifact download lands them there again in CI.
-      'hadolint.wasm.sha256',
+      // Patterns, not names: see the note in `stylelint.config.js`. The glue
+      // stays by name because it *is* a `.js` file, and a glob could not tell
+      // it apart from source that should be linted.
+      '**/*.wasm',
+      '**/*.sha256',
       'lib',
       'pnpm-lock.yaml',
       // The pinned hadolint checkout; its website assets are not ours to lint.

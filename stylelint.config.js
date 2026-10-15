@@ -20,11 +20,12 @@ export default {
     'coverage/**',
     'dist/**',
     'LICENSE',
-    'hadolint-cli.wasm',
-    'hadolint.wasm',
-    // The `.sha256` beside it is fetched by CI along with the binary; it is a
-    // hex digest, which the CSS parser reports as `Unknown word`.
-    'hadolint.wasm.sha256',
+    // Patterns, not names. Naming artifacts individually has already trailed
+    // three renames on this branch — `hadolint.wasm`, its `.sha256`, and the
+    // command build — and each new name was parsed as CSS before anyone
+    // noticed. A glob closes the class.
+    '**/*.wasm',
+    '**/*.sha256',
     'lib/**',
     // The pinned hadolint checkout ships its own website CSS.
     'hadolint/**',
