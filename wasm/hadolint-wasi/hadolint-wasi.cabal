@@ -1,0 +1,38 @@
+cabal-version:      2.4
+name:               hadolint-wasi
+version:            0
+synopsis:           The JS-facing reactor build of hadolint that dlintr ships
+description:
+  Exports @lint@ and @version@ to JavaScript, matching the shape upstream
+  proposes in hadolint#1271 so that this package can be deleted once the
+  submodule moves past it. Not published; a build target only.
+
+build-type:         Simple
+
+executable hadolint-wasi
+  main-is:          Main.hs
+  hs-source-dirs:   .
+  default-language: GHC2021
+
+  -- A reactor, not a command: no Haskell entry point, and the two symbols the
+  -- JS host calls. `-single-threaded` because wasm32-wasi has no threaded RTS,
+  -- and `-A4m` for the same reason the CLI build uses it.
+  ghc-options:
+    -no-hs-main
+    -optl-mexec-model=reactor
+    -optl-Wl,--export=lint
+    -optl-Wl,--export=version
+    -single-threaded
+    "-with-rtsopts=-A4m"
+
+  build-depends:
+      aeson
+    , base
+    , bytestring
+    , containers
+    , data-default
+    , ghc-experimental >= 9.1003 && < 9.1201
+    , hadolint
+    , language-docker
+    , megaparsec
+    , text

@@ -13,6 +13,10 @@ export default {
     '**/*.sh',
     '**/*.yaml',
     '**/*.yml',
+    // The wasm build recipe is Haskell and cabal, not CSS.
+    '**/*.cabal',
+    '**/*.hs',
+    '**/cabal.project',
     'coverage/**',
     'dist/**',
     'LICENSE',
