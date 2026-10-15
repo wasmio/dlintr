@@ -85,21 +85,45 @@ jobs:
         run: echo "revision=$(git -C hadolint rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Restores the GHC wasm toolchain, the Haskell dependency build and the
-      # artifact itself. A hit means this job only has to re-run the smoke test.
-      - name: Cache Toolchain and Build
-        id: cache
+      # artifact itself.
+      #
+      # Two caches, deliberately split. The toolchain is about a gigabyte and
+      # depends only on the pinned revision, bindist and optimiser — *not* on
+      # anything under `wasm/`. Keying it on the recipe, as this once did, meant
+      # every typo fix in a build script paid for a full GHC install again, which
+      # is the difference between a two-minute compile-error iteration and a
+      # twenty-minute one.
+      - name: Cache the toolchain
+        id: toolchain
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.ghc-wasm
             ~/.ghcup
             ~/.cabal
+          key: wasm-toolchain-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-${{ env.GHC_WASM_BINDIST_TAG }}-${{ env.BINARYEN_SHA256 }}
+
+      # Only `dist-newstyle`, and a hit does **not** skip the build steps below.
+      # Seeding the incremental state is the whole point; skipping the compile
+      # would hide exactly the compile errors this job exists to surface, and a
+      # cache saved from a failed run would then keep hiding them.
+      #
+      # That is the third way this pipeline has been able to report success for
+      # something that did not happen, after `continue-on-error` swallowing a
+      # step's conclusion and `if-no-files-found: ignore` swallowing a missing
+      # artifact. All three produce a green run describing a build that never
+      # took place. Ask the same question of anything added here: what would it
+      # hide?
+      - name: Restore the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
             hadolint/dist-newstyle
-            hadolint.wasm
-          key: wasm-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('wasm/**', '.github/workflows/wasm.yml') }}
+            wasm/hadolint-wasi/dist-newstyle
+          key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('wasm/**', '.github/workflows/wasm.yml') }}
 
       - name: Install System Dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.toolchain.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -125,7 +149,7 @@ jobs:
             zlib1g-dev
 
       - name: Install binaryen
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.toolchain.outputs.cache-hit != 'true'
         run: |
           curl -fsSL -o binaryen.tar.gz "$BINARYEN_URL"
           echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
@@ -133,7 +157,7 @@ jobs:
           echo "$PWD/$BINARYEN_DIR/bin" >> "$GITHUB_PATH"
 
       - name: Install GHC wasm toolchain
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.toolchain.outputs.cache-hit != 'true'
         env:
           # `gh api` below needs it; it is not picked up implicitly.
           GH_TOKEN: ${{ github.token }}
@@ -165,7 +189,7 @@ jobs:
       # library versions, because `base`/`text` decide whether hadolint's bounds
       # are even satisfiable.
       - name: Probe Toolchain
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.toolchain.outputs.cache-hit != 'true'
         run: |
           source ~/.ghc-wasm/env
 
@@ -225,7 +249,6 @@ jobs:
           echo "::endgroup::"
 
       - name: Build hadolint.wasm
-        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           source ~/.ghc-wasm/env
 
@@ -295,7 +318,6 @@ jobs:
       # reported `success`, the artifact upload quietly found no files, and the
       # only trace was in the log. Do not put it back.
       - name: Build the reactor
-        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           source ~/.ghc-wasm/env
           export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
