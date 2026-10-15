@@ -1,15 +1,8 @@
-import type { WasiRuntime } from './runtime.js'
-import type { LintOptions, LintResult, RunOptions, RunResult } from './types.js'
+import type { Reactor } from './reactor.js'
+import type { LintOptions, LintResult, Severity } from './types.js'
 
-/** The public surface, independent of which WASI host is underneath. */
+/** The public surface, independent of which host is underneath. */
 export interface Dlinter {
-  /**
-   * Run `hadolint` with raw CLI arguments.
-   *
-   * Only stdin is reachable: the module runs without a filesystem, so pass the
-   * Dockerfile through {@link RunOptions.stdin} and `-` as the argument.
-   */
-  run: (args: string[], options?: RunOptions) => Promise<RunResult>
   /**
    * Lint Dockerfile content and resolve with the findings.
    *
@@ -17,59 +10,72 @@ export interface Dlinter {
    * `DL1000` finding with `level: 'error'`.
    */
   lint: (dockerfile: string, options?: LintOptions) => Promise<LintResult[]>
-  /** The bundled hadolint version, e.g. `Haskell Dockerfile Linter 3.0.0`. */
+  /** The bundled hadolint version, e.g. `Haskell Dockerfile Linter 2.15.1`. */
   getVersion: () => Promise<string>
 }
 
-/** Wire the public API onto a concrete WASI host. */
-export const createDlinter = (runtime: WasiRuntime): Dlinter => {
-  let version: Promise<string> | undefined
+/**
+ * Build a reactor for an environment, given as `KEY=value` pairs.
+ *
+ * Instantiation is per environment rather than per call, because WASI fixes the
+ * environment when the instance is created: the reactor reads
+ * `HADOLINT_TRUSTED_REGISTRIES` through `environ_get`, so a different
+ * environment has to be a different instance.
+ */
+export type LoadReactor = (env: readonly string[]) => Promise<Reactor>
+
+/**
+ * hadolint resolves its config through `getHomeDirectory`, and GHC's
+ * implementation falls back to `getEffectiveUserID`, which wasip1 does not
+ * provide. Without `HOME` the reactor dies before linting anything.
+ */
+const HOME = 'HOME=/'
+
+/** Wire the public API onto a concrete reactor. */
+export const createDlinter = (load: LoadReactor): Dlinter => {
+  const reactors = new Map<string, Promise<Reactor>>()
+
+  const instance = (env?: Record<string, string>): Promise<Reactor> => {
+    const pairs = [
+      HOME,
+      ...Object.entries(env ?? {}).map(([key, value]) => `${key}=${value}`),
+    ]
+    const key = pairs.join('\n')
+
+    let reactor = reactors.get(key)
+    if (!reactor) {
+      reactor = load(pairs)
+      reactors.set(key, reactor)
+      // A cached rejection would make one transient failure permanent.
+      reactor.catch(() => reactors.delete(key))
+    }
+    return reactor
+  }
 
   return {
-    run: runtime.run,
-
     lint: async (
       dockerfile: string,
       options: LintOptions = {},
     ): Promise<LintResult[]> => {
-      const args = ['--format', 'json']
-      for (const code of options.ignore ?? []) {
-        args.push('--ignore', code)
-      }
-      for (const [code, level] of Object.entries(
-        options.severityOverrides ?? {},
-      )) {
-        if (level) {
-          args.push(`--${level}`, code)
-        }
-      }
-      args.push('-')
+      const { lint } = await instance(options.env)
+      const findings = JSON.parse(await lint(dockerfile)) as LintResult[]
 
-      const { stdout, stderr } = await runtime.run(args, {
-        stdin: dockerfile,
-        env: options.env,
-      })
-
-      // A clean Dockerfile is `[]`, never empty, so silence means hadolint never
-      // reached the linting stage — a rejected option, say. Reporting "no
-      // findings" there would hide a broken invocation.
-      if (!stdout) {
-        if (stderr) {
-          throw new Error(stderr.trim())
-        }
-        return []
-      }
-      return JSON.parse(stdout) as LintResult[]
+      // `--ignore` and `--error`/`--warning`/… used to be CLI arguments. The
+      // reactor's `lint` takes only the Dockerfile, so both are applied here.
+      // Neither needs the Haskell side — they are filtering and relabelling —
+      // so neither is lost along with the argument surface.
+      const ignored = new Set(options.ignore ?? [])
+      return findings
+        .filter(({ code }) => !ignored.has(code))
+        .map(({ code, ...rest }) => {
+          const level: Severity | undefined = options.severityOverrides?.[code]
+          return level ? { code, ...rest, level } : { code, ...rest }
+        })
     },
 
-    getVersion: () =>
-      (version ??= runtime
-        .run(['--version'])
-        .then(({ stdout }) => stdout.trim())
-        .catch((error: unknown) => {
-          // A cached rejection would make one transient failure permanent.
-          version = undefined
-          throw error
-        })),
+    getVersion: async (): Promise<string> => {
+      const { version } = await instance()
+      return version()
+    },
   }
 }

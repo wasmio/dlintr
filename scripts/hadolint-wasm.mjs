@@ -25,7 +25,12 @@
  *  - `HADOLINT_WASM_SKIP_FETCH` is set, which is how a workflow that has just
  *    built the binary itself says "it is already here".
  *
- * It is written to the package root, one level above both `src/` and `lib/`, so
+ * Two files are fetched, not one: the module and the `ghc_wasm_jsffi.js` glue
+ * GHC generates beside it. The exports are unreachable without the glue, so a
+ * release carrying only the wasm would be unusable, and a partial download has
+ * to fail rather than leave half a working runtime behind.
+ *
+ * Both are written to the package root, one level above both `src/` and `lib/`, so
  * `new URL('../hadolint.wasm', import.meta.url)` resolves identically when
  * running from the sources (vitest) and from the build output (published).
  */
@@ -123,8 +128,14 @@ const main = async () => {
   }
 
   process.stderr.write(`dlintr: fetching hadolint.wasm for dlintr@${version}\n`)
-  const response = await get(url)
-  const buffer = Buffer.from(await response.arrayBuffer())
+  const [wasm, glue] = await Promise.all([
+    get(url).then(response => response.arrayBuffer()),
+    get(`${url.slice(0, -'hadolint.wasm'.length)}ghc_wasm_jsffi.js`).then(
+      response => response.text(),
+    ),
+  ])
+
+  const buffer = Buffer.from(wasm)
   const digest = sha256(buffer)
   if (digest !== expected) {
     throw new Error(
@@ -132,11 +143,15 @@ const main = async () => {
     )
   }
 
-  await writeFile(target, buffer)
+  await Promise.all([
+    writeFile(target, buffer),
+    writeFile(path.join(root, 'ghc_wasm_jsffi.js'), glue),
+  ])
+
   process.stderr.write(
     `dlintr: hadolint.wasm ready (${(buffer.byteLength / 1024 / 1024).toFixed(
       1,
-    )} MiB)\n`,
+    )} MiB), with its glue\n`,
   )
 }
 

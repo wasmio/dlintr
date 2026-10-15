@@ -112,4 +112,6 @@ jobs:
         run: |
           tag="v$(node -p 'JSON.parse(process.env.PUBLISHED)[0].version')"
           echo "attaching to $tag"
-          gh release upload "$tag" hadolint.wasm hadolint.wasm.sha256 --clobber
+          # The glue is not optional: the module exports `lint` and `version` only
+          # through it, so a release carrying the wasm alone would be unusable.
+          gh release upload "$tag" hadolint.wasm ghc_wasm_jsffi.js hadolint.wasm.sha256 --clobber

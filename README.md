@@ -40,12 +40,12 @@ yarn add dlintr
 npm i dlintr
 ```
 
-Requires Node.js 20.1+ for the built-in [`node:wasi`][node-wasi].
+`@bjorn3/browser_wasi_shim` is a dependency, and it is not optional.
 
 ### API
 
 ```js
-import { getVersion, lint, run } from 'dlintr'
+import { getVersion, lint } from 'dlintr'
 
 // Lint Dockerfile content and get the findings back.
 const results = await lint('FROM ubuntu:latest\nRUN apt-get update\n')
@@ -55,34 +55,51 @@ const results = await lint('FROM ubuntu:latest\nRUN apt-get update\n')
 // ]
 
 await lint('FROM alpine:3.20\n', {
-  ignore: ['DL3009'], // rule codes to suppress
+  ignore: ['DL3009'], // rule codes to suppress, applied to the findings
   severityOverrides: { DL3007: 'error' }, // re-level a single rule
   env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' }, // anything hadolint reads
 })
 
-await getVersion() // 'Haskell Dockerfile Linter 3.0.0'
+await getVersion() // 'Haskell Dockerfile Linter 2.15.1'
+```
 
-// Or drive the CLI directly, for options `lint` does not model.
-const { exitCode, stdout, stderr } = await run(
-  ['--no-color', '--failure-threshold', 'error', '-'],
-  {
-    stdin: 'FROM ubuntu:latest\n',
-  },
+An unparseable Dockerfile is reported, not thrown: hadolint returns it as a
+`DL1000` finding with `level: 'error'`.
+
+To gate CI, look at `level`:
+
+```js
+const problems = (await lint(dockerfile)).filter(
+  ({ level }) => level === 'error',
 )
 ```
 
-An unparseable Dockerfile is reported, not thrown: hadolint returns it as a `DL1000` finding with `level: 'error'`. Anything that stops hadolint before linting — a rejected option, for instance — is thrown, since it would otherwise be indistinguishable from a clean Dockerfile.
-
-`lint` returns findings and drops the exit code. To gate CI, either look at `level`, or use `run` with `--failure-threshold` and check `exitCode`.
-
 ### How it works
 
-[`hadolint`][hadolint] is compiled to WASI with the GHC backend and executed in-process; there is no native binary and no Docker.
+[`hadolint`][hadolint] is compiled to a WebAssembly _reactor_ with the GHC
+backend and called in-process; there is no native binary and no Docker. The
+module is instantiated once and `lint` is called on it.
 
-- **Node** drives it with the built-in `node:wasi`, so there is nothing to install.
-- **Browsers** get [`@bjorn3/browser_wasi_shim`][bjorn3] (~29 kB minified) through the `browser` export condition. It is an optional peer dependency — install it if you target the browser, and Node users never pay for it.
+**This is a breaking change from 0.1.x.** The module previously exposed
+hadolint's command-line interface, and now exports one function:
 
-The Dockerfile is fed over stdin, which is why no filesystem has to be mounted: only what you pass to `lint`/`run` is ever visible to the linter, and it cannot read files from the host.
+- **`run()` is gone**, and with it the whole CLI surface. `--failure-threshold`,
+  `--config`, `--format`, `--no-color` and the rest are no longer reachable
+  from JavaScript. `lint` returns the findings as JSON, and the output format is
+  no longer configurable.
+- `ignore` and `severityOverrides` survive, applied to the returned findings —
+  they only ever filtered and relabelled, so they never needed the Haskell side.
+- `env` survives too, and reaches hadolint through WASI as before.
+- **`@bjorn3/browser_wasi_shim` is now required on Node as well**, and the
+  README's old claim that Node needed nothing installed no longer holds. The
+  built-in `node:wasi` _cannot_ start this module: its `initialize` ends in
+  `proc_exit(71)` and the RTS never starts, so every call answers "RTS is not
+  initialised". That is true of upstream's published reactor as well, so it is a
+  limitation of `node:wasi` rather than of this build. One WASI implementation
+  for both runtimes is the compensation.
+
+Nothing is fed over stdin any more: the Dockerfile is passed straight to `lint`,
+so the module never sees a file descriptor that could read the host.
 
 ## Sponsors
 

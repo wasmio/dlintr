@@ -264,12 +264,37 @@ jobs:
               ;;
           esac
 
-          bash wasm/build.sh
+          bash wasm/build.sh hadolint-cli.wasm
 
       # A module that links but cannot start is the failure worth catching, so
       # this really runs it. See wasm/smoke.mjs.
       - name: Smoke Test
-        run: node wasm/smoke.mjs hadolint.wasm
+        run: node wasm/smoke.mjs hadolint-cli.wasm
+
+      # The command build no longer ships — the reactor does — but it is kept
+      # and published as its own artifact, because it is the reference the
+      # format-equality test compares against. That test is only worth having
+      # when both sides come from the same commit.
+      - name: Upload the command reference
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hadolint-cli
+          path: hadolint-cli.wasm
+          if-no-files-found: error
+
+      # Deliberately after the reference is banked, and deliberately fatal. A
+      # compile error here still leaves the command artifact for \`ci\` to test —
+      # \`ci\` runs with \`if: always()\` for exactly that reason — while the error
+      # itself is a red run instead of a tolerated step.
+      #
+      # It was \`continue-on-error\` for one run and that was a mistake: the step
+      # reported \`success\`, the artifact upload quietly found no files, and the
+      # only trace was in the log. Do not put it back.
+      - name: Build the reactor
+        run: |
+          source ~/.ghc-wasm/env
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js
 
       - name: Checksum
         id: wasm
@@ -288,9 +313,8 @@ jobs:
             echo "| size | \`$(du -h hadolint.wasm | cut -f1)\` |"
             echo "| sha256 | \`$digest\` |"
             echo
-            echo "\`release.yml\` attaches this to the release changesets creates,"
-            echo "at \`releases/download/dlintr@<version>/hadolint.wasm\`, which is"
-            echo "where \`scripts/hadolint-wasm.mjs\` looks for it."
+            echo "\`release.yml\` attaches this and \`ghc_wasm_jsffi.js\` to the release"
+            echo "changesets creates, which is where \`scripts/hadolint-wasm.mjs\` looks."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Fork pull requests get a read-only token, so signing is not available.
@@ -300,36 +324,14 @@ jobs:
         with:
           subject-path: hadolint.wasm
 
+      # The two files the package ships. The glue is not optional: the exports
+      # are unreachable without it.
       - name: Upload WASM Artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: hadolint-wasm
           path: |
             hadolint.wasm
+            ghc_wasm_jsffi.js
             hadolint.wasm.sha256
           if-no-files-found: error
-
-      # Deliberately last, and deliberately fatal. It runs after the command
-      # artifact is uploaded, so a compile error here still leaves that artifact
-      # for `ci` to test — `ci` runs with `if: always()` for exactly that reason
-      # — while the error itself is a red run instead of a tolerated step.
-      #
-      # It was `continue-on-error` for one run and that was a mistake: the step
-      # reported `success`, the artifact upload quietly found no files, and the
-      # only trace was in the log. Do not put it back.
-      - name: Build the reactor
-        run: |
-          source ~/.ghc-wasm/env
-          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
-          bash wasm/build-reactor.sh hadolint-reactor.wasm ghc_wasm_jsffi.js
-
-      # Separate artifact, and tolerated absent: the reactor is not consumed
-      # yet, and its build is allowed to fail above.
-      - name: Upload the reactor
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: hadolint-wasm-reactor
-          path: |
-            hadolint-reactor.wasm
-            ghc_wasm_jsffi.js
-          if-no-files-found: ignore

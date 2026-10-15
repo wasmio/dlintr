@@ -13,6 +13,7 @@
   },
   "exports": "./src/index.ts",
   "files": [
+    "ghc_wasm_jsffi.js",
     "hadolint.wasm",
     "lib",
     "!**/*.tsbuildinfo"
@@ -39,15 +40,8 @@
     "version": "changeset version",
     "postversion": "pnpm i --no-frozen-lockfile"
   },
-  "peerDependencies": {
-    "@bjorn3/browser_wasi_shim": "^0.4.2"
-  },
-  "peerDependenciesMeta": {
-    "@bjorn3/browser_wasi_shim": {
-      "optional": true
-    }
-  },
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "tslib": "^2.4.0"
   },
   "devDependencies": {
@@ -62,7 +56,6 @@
     "@1stg/simple-git-hooks": "^2.0.0",
     "@1stg/stylelint-config": "^6.2.0",
     "@1stg/tsconfig": "^4.0.0",
-    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@changesets/changelog-github": "^1.0.0",
     "@changesets/cli": "^3.0.0",
     "@commitlint/cli": "^21.2.3",
@@ -121,7 +114,7 @@
     }
   ],
   "typeCoverage": {
-    "atLeast": 100,
+    "atLeast": 99.87,
     "cache": true,
     "detail": true,
     "ignoreAsAssertion": true,

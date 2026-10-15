@@ -4,9 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { getVersion, lint } from '../src/browser.js'
 
 /**
- * The browser entry loads its wasm over `fetch`, which Node implements for
- * http(s) only. Serving the file from disk lets the `browser_wasi_shim` path be
- * covered in CI without launching a browser.
+ * The browser entry fetches its wasm, which Node only implements for http(s).
+ * Serving the file from disk lets the browser path be covered in CI without
+ * launching a browser. The glue is loaded with a real `import()` in both
+ * environments, so it needs no stub.
  */
 const realFetch = globalThis.fetch
 
@@ -54,7 +55,7 @@ test('reports an unparseable Dockerfile instead of throwing', async () => {
   expect(results[0]).toMatchObject({ code: 'DL1000', level: 'error' })
 })
 
-test('runs the same single-use module more than once', async () => {
+test('reuses one instance across calls', async () => {
   for (let index = 0; index < 3; index++) {
     await expect(lint('FROM alpine:3.20\n')).resolves.toEqual([])
   }

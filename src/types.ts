@@ -5,19 +5,7 @@
  */
 export type Severity = 'error' | 'info' | 'style' | 'warning'
 
-/** Every output format `hadolint` can emit. */
-export type OutputFormat =
-  | 'checkstyle'
-  | 'codacy'
-  | 'codeclimate'
-  | 'gitlab_codeclimate'
-  | 'gnu'
-  | 'json'
-  | 'sarif'
-  | 'sonarqube'
-  | 'tty'
-
-/** A single finding, as reported by `hadolint --format json`. */
+/** A single finding, as reported by hadolint's JSON formatter. */
 export interface LintResult {
   /** Rule code, e.g. `DL3007`; `DL1000` means the Dockerfile could not be parsed. */
   code: string
@@ -25,29 +13,8 @@ export interface LintResult {
   column: number
   level: Severity
   message: string
-  /** Filename echoed by hadolint; `-` when the content came from stdin. */
+  /** Filename echoed by hadolint; `-` because the content is passed directly. */
   file: string
-}
-
-/** Result of a raw `hadolint` invocation. */
-export interface RunResult {
-  exitCode: number
-  stdout: string
-  stderr: string
-}
-
-/** Options for {@link Dlinter.run}. */
-export interface RunOptions {
-  /**
-   * Dockerfile content handed to hadolint over stdin. Use `-` in `args` to have
-   * hadolint read it.
-   */
-  stdin?: string
-  /**
-   * Extra environment variables for hadolint. Note that hadolint reads `HOME`
-   * while looking for a config file, so it is always supplied.
-   */
-  env?: Record<string, string>
 }
 
 /** Options for {@link Dlinter.lint}. */
@@ -57,11 +24,18 @@ export interface LintOptions {
   /**
    * Re-level individual rules, e.g. `{ DL3007: 'error' }`.
    *
-   * hadolint has no severity *filter* — `--failure-threshold` only changes the
-   * exit code, which {@link Dlinter.lint} does not report. To act on just the
-   * serious findings, filter the returned results on `level`.
+   * Applied to the returned findings. hadolint has no severity *filter*, and
+   * there is no exit code to threshold any more, so to act on just the serious
+   * findings, filter the results on `level`.
    */
   severityOverrides?: Partial<Record<string, Severity>>
-  /** Extra environment variables; `HADOLINT_IGNORE` and friends also work. */
+  /**
+   * Extra environment variables for hadolint, e.g.
+   * `{ HADOLINT_TRUSTED_REGISTRIES: 'docker.io' }`.
+   *
+   * These reach the module through WASI, so changing them re-instantiates the
+   * reactor — which is cheap, but not free, so pass a stable set rather than
+   * varying it per call.
+   */
   env?: Record<string, string>
 }
