@@ -118,7 +118,16 @@ const runCli = async (dockerfile: string): Promise<string> => {
 
     return readFileSync(stdout, 'utf8')
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    // Best effort. `wasi.start` closes the descriptors it was handed, but on
+    // Windows the directory can still refuse to go with `ENOTEMPTY` while those
+    // handles are released — which is timing-dependent, so Node 24 and 26 pass
+    // on the same runner where 20 and 22 do not. A leftover temp directory is
+    // not a reason to fail the check that ran.
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      // The assertions above are the test; this is housekeeping.
+    }
   }
 }
 
