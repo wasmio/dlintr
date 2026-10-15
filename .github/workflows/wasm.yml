@@ -29,10 +29,11 @@ on:
 # each other's build and leaving one of them with nothing to download.
 concurrency:
   group: wasm-${{ github.workflow }}-${{ github.ref }}
-  # Only supersede on pull requests. Cancelling an in-flight build on a branch
-  # that is being iterated on throws away a twenty-minute toolchain install to
-  # save a typo fix — precisely when the result is worth most.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Supersede on any branch that is not `main`. A feature branch gets pushed
+  # repeatedly, and every superseded run is a full toolchain install thrown
+  # away — the queue is a real cost. `main` never cancels, so a release build is
+  # never killed once it is under way.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -242,6 +243,23 @@ jobs:
 
           bash wasm/build.sh
 
+      # The reactor — `lint(text)`, not a process to pipe stdin into — is what
+      # the runtime will call. Its wrapper has never been compiled, because
+      # nothing here can compile Haskell outside CI, so this step exists purely
+      # to find out whether the Haskell is valid.
+      #
+      # `continue-on-error` because nothing consumes it yet: the command build
+      # above still carries the test suite, and a reactor that does not compile
+      # should not stop that. It becomes a hard failure in the same commit that
+      # flips the runtime onto it.
+      - name: Build the reactor (unverified wrapper)
+        if: steps.cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          source ~/.ghc-wasm/env
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          bash wasm/build-reactor.sh hadolint-reactor.wasm ghc_wasm_jsffi.js
+
       # A module that links but cannot start is the failure worth catching, so
       # this really runs it. See wasm/smoke.mjs.
       - name: Smoke Test
@@ -284,3 +302,14 @@ jobs:
             hadolint.wasm
             hadolint.wasm.sha256
           if-no-files-found: error
+
+      # Separate artifact, and tolerated absent: the reactor is not consumed
+      # yet, and its build is allowed to fail above.
+      - name: Upload the reactor
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hadolint-wasm-reactor
+          path: |
+            hadolint-reactor.wasm
+            ghc_wasm_jsffi.js
+          if-no-files-found: ignore
