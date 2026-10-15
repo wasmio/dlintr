@@ -16,17 +16,24 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Upload the result to the `hadolint-wasm` release
+        description: Upload the result to the wasm release
         type: boolean
         default: false
   push:
     branches:
       - main
-    paths:
-      - .github/workflows/wasm.yml
-      - .gitmodules
-      - vendor/hadolint
-      - wasm/**
+    # Pushing the version tag is what publishes. The tag names the hadolint
+    # version and the publish step refuses if it disagrees with the submodule,
+    # so the artifact and its URL cannot drift apart.
+    #
+    # `workflow_dispatch` does the same by hand, but only once this file is on
+    # the default branch: GitHub will not dispatch a workflow that is not there.
+    tags:
+      - 'wasm-hadolint-*'
+    # Deliberately no `paths` filter. It cannot coexist with a tag filter, and
+    # with the cache keyed on the recipe and the submodule revision an unrelated
+    # push to main is a cache hit that costs a checkout and a smoke test.
+    # `cancel-in-progress` is off for pushes, so this never kills a real build.
 
 # A build only matters if it is the newest one. `github.workflow` is the name of
 # the *caller*, which keeps this from being two workflows that both need the
@@ -298,7 +305,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to the wasm Release
-        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        if: (github.event_name == 'workflow_dispatch' && inputs.publish) || startsWith(github.ref, 'refs/tags/wasm-hadolint-')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
