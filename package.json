@@ -30,6 +30,7 @@
     "lint:es": "eslint . --cache -f friendly --max-warnings 10",
     "lint:style": "stylelint . --cache",
     "lint:tsc": "tsc --noEmit && tsc -p docs --noEmit",
+    "lint:typecov": "type-coverage",
     "prepare": "simple-git-hooks",
     "prerelease": "pnpm build",
     "release": "changeset publish",
@@ -114,13 +115,13 @@
     }
   ],
   "typeCoverage": {
-    "atLeast": 99.87,
+    "atLeast": 100,
     "cache": true,
     "detail": true,
     "ignoreAsAssertion": true,
     "ignoreNonNullAssertion": true,
     "showRelativePath": true,
     "strict": true,
-    "update": true
+    "update": false
   }
 }

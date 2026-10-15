@@ -106,13 +106,17 @@ const runCli = async (dockerfile: string): Promise<string> => {
     })
 
     const module = await WebAssembly.compile(readFileSync(cliWasm))
+    // `@bjorn3/browser_wasi_shim` declares `wasiImport` as
+    // `{ [key: string]: (...args: Array<any>) => unknown }`, so its `any` is
+    // inescapable here: annotating the binding narrows how it is *used*, but the
+    // source type still carries it, and the assertion this config declines to
+    // credit is exactly the double cast that would silence it. Suppressed on
+    // this one line rather than by lowering the global floor — which is what
+    // `update: true` had been doing silently, one regression at a time.
+    // type-coverage:ignore-next-line
+    const wasiImports: Record<string, WebAssembly.ExportValue> = wasi.wasiImport
     const instance = await WebAssembly.instantiate(module, {
-      // The shim types `wasiImport` with an `any`-valued index signature of
-      // its own, so assert the namespace shape at the boundary.
-      wasi_snapshot_preview1: wasi.wasiImport as Record<
-        string,
-        WebAssembly.ExportValue
-      >,
+      wasi_snapshot_preview1: wasiImports,
     })
     wasi.start(instance)
 
