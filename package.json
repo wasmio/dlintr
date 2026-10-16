@@ -19,10 +19,10 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "run-p check:wasm build:r build:tsc",
+    "build": "run-p build:*",
     "build:r": "r -f cjs",
     "build:tsc": "tsc -p src",
-    "check:wasm": "node scripts/hadolint-wasm.mjs",
+    "build:wasm": "node scripts/build-wasm.mjs",
     "dev": "vitest",
     "docs:build": "vite build docs",
     "docs:dev": "vite docs",
@@ -35,7 +35,6 @@
     "prerelease": "pnpm build",
     "release": "changeset publish",
     "serve": "sirv dist -s",
-    "pretest": "node scripts/hadolint-wasm.mjs",
     "test": "vitest run --coverage",
     "typecov": "type-coverage",
     "version": "changeset version",

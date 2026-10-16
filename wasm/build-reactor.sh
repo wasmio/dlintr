@@ -29,19 +29,36 @@ if [ ! -f "$root/hadolint/hadolint.cabal" ]; then
   exit 1
 fi
 
+# The toolchain puts `wasm32-wasi-*`, cabal and the pinned `wasm-opt` on PATH,
+# and `wasm/toolchain.sh` writes that as `$PREFIX/wasm-env`. Sourcing it here
+# means calling this script is enough: a PATH the caller has to set is a step
+# that can be forgotten, and forgetting it produces a message about a missing
+# tool rather than about the missing step.
+prefix="${PREFIX:-$HOME/.ghc-wasm}"
+if [ -f "$prefix/wasm-env" ]; then
+  # shellcheck disable=SC1091
+  source "$prefix/wasm-env"
+fi
+
 for tool in wasm32-wasi-cabal wasm32-wasi-ghc wasm-opt; do
   command -v "$tool" > /dev/null || {
-    echo "wasm: $tool not found on PATH — did you 'source ~/.ghc-wasm/env'?" >&2
+    echo "wasm: $tool not found on PATH — install the toolchain with wasm/toolchain.sh" >&2
     exit 1
   }
 done
 
+# The build prints the path it produced as its last line, so it has to be teed
+# somewhere. `mktemp` rather than a fixed `/tmp/...` name: on WSL2 that directory
+# is a small tmpfs, and a fixed name is one more thing that only works when one
+# build runs at a time.
+list="$(mktemp)"
 (
   cd "$project"
   wasm32-wasi-cabal build exe:hadolint-wasi
   wasm32-wasi-cabal list-bin exe:hadolint-wasi
-) | tee /tmp/wasm-reactor-bin.txt >&2
-bin="$(tail -n 1 /tmp/wasm-reactor-bin.txt)"
+) | tee "$list" >&2
+bin="$(tail -n 1 "$list")"
+rm -f "$list"
 
 wasm-opt -Oz --converge -o "$output" "$bin"
 

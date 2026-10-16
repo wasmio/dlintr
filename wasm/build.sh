@@ -9,9 +9,10 @@
 # upstream publishes to GitHub Pages, which is a JSFFI *reactor* wired to the
 # website's DOM (`#lint`, `#dockerfile__code`).
 #
-# Requires the GHC wasm toolchain on PATH (`source ~/.ghc-wasm/env`), which
-# brings `wasm32-wasi-cabal`, plus `wasm-opt`. `.github/workflows/wasm.yml`
-# installs both at pinned versions; `wasm/README.md` describes the local case.
+# Requires the GHC wasm toolchain, which `wasm/toolchain.sh` installs and this
+# script sources for itself. That is the *command* build, kept because it is the
+# reference the byte-equality test compares the reactor against; the reactor is
+# `wasm/build-reactor.sh`, and it is what the package ships.
 #
 # Usage: wasm/build.sh [output.wasm]
 set -euo pipefail
@@ -31,9 +32,17 @@ fi
 # toolchain, so Cabal never reaches for a native ghc. Everything the ghcup-based
 # flow needed on top of that (PATH juggling, symlinking ghc into ~/.ghcup) is
 # unnecessary here, because the wasm toolchain is the only one installed.
+# The toolchain's `wasm-env` carries the PATH; see the note in
+# `wasm/build-reactor.sh` for why this is sourced rather than required.
+prefix="${PREFIX:-$HOME/.ghc-wasm}"
+if [ -f "$prefix/wasm-env" ]; then
+  # shellcheck disable=SC1091
+  source "$prefix/wasm-env"
+fi
+
 for tool in wasm32-wasi-cabal wasm-opt; do
   command -v "$tool" > /dev/null || {
-    echo "wasm: $tool not found on PATH — did you 'source ~/.ghc-wasm/env'?" >&2
+    echo "wasm: $tool not found on PATH — install the toolchain with wasm/toolchain.sh" >&2
     exit 1
   }
 done

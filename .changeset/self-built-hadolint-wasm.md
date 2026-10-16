@@ -24,6 +24,6 @@ another project's committed blob, and from hadolint v2.15.1 instead of a March
   package keeps **no runtime dependencies**, and the fifteen imports it never
   calls throw by name if a future module reaches for them.
 - The module ships with `ghc_wasm_jsffi.js`, GHC's half of the JSFFI. The
-  exports are unreachable without it, so the release carries it too.
+  exports are unreachable without it, so the npm tarball carries both.
 - It is smaller and more current: 7.9 MB against 12.4 MB, and seven rules the
   old binary did not have — DL3062 through DL3068 — so expect new findings.

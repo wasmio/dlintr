@@ -31,14 +31,18 @@ const RECIPE_HASH_LENGTH = 16
 
 /**
  * The files that decide the reactor's bytes, named explicitly — the same list
- * the build cache in `wasm.yml` is keyed on. The two must stay in step, or a
- * cache that moves when the recipe does not makes the history unreadable.
+ * the build cache in `.github/actions/wasm-toolchain/action.yml` is keyed on. The
+ * two must stay in step, or a cache that moves when the recipe does not makes the
+ * history unreadable.
+ *
+ * `wasm/toolchain.sh` is here because it holds the pins: the pinned `wasm-opt`
+ * decides the bytes of the artifact as surely as the Haskell sources do.
  *
  * `wasm/build.sh` and the CLI patch are absent on purpose: they build the
  * command*, which the format test compares against, not this reactor.
  */
 const RECIPE_INPUTS = [
-  '.github/workflows/wasm.yml',
+  'wasm/toolchain.sh',
   'wasm/build-reactor.sh',
   'wasm/hadolint-wasi/cabal.project',
   'wasm/hadolint-wasi/hadolint-wasi.cabal',
