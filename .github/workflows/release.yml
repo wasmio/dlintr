@@ -83,34 +83,19 @@ jobs:
         run: pnpm i
 
       # `pnpm release` runs the `prerelease` hook, which is `pnpm build`, which
-      # packs `hadolint.wasm`. On the publish path it is already here, so say so
-      # instead of letting the downloader look for a release that does not exist
-      # yet. Left empty on the version-PR path, where nothing is packed — that
-      # way a publish that somehow lost its artifact fails loudly rather than
-      # shipping a package with no binary in it.
+      # packs `hadolint.wasm` into the npm tarball — and which starts with
+      # `check:wasm`, so a publish that somehow lost its artifact fails here
+      # rather than shipping a package with no binary in it.
+      #
+      # Nothing is attached to the release. The tarball is the delivery, and it
+      # is the content-addressed, immutable one; a second copy on the release
+      # bought nothing and made `pretest` depend on an asset that only exists
+      # after the release it is meant to precede.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
-        env:
-          HADOLINT_WASM_SKIP_FETCH: ${{ needs.wasm.result == 'success' && '1' || '' }}
         with:
           publish-script: pnpm release
           version-script: pnpm run version
           commit-message: 'chore: release dlintr'
           pr-title: 'chore: release dlintr'
-
-      # Attach the binary to the release changesets just created, so that
-      # `scripts/hadolint-wasm.mjs` can fetch it for this version. Changesets
-      # tags `v<version>`; the URL is derived from the package version, so an
-      # older package keeps fetching its own artifact.
-      - name: Attach hadolint.wasm to the release
-        if: steps.changesets.outputs.published == 'true' && needs.wasm.result == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
-        run: |
-          tag="v$(node -p 'JSON.parse(process.env.PUBLISHED)[0].version')"
-          echo "attaching to $tag"
-          # The glue is not optional: the module exports `lint` and `version` only
-          # through it, so a release carrying the wasm alone would be unusable.
-          gh release upload "$tag" hadolint.wasm ghc_wasm_jsffi.js hadolint.wasm.sha256 --clobber

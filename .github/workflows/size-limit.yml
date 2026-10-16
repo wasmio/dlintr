@@ -10,14 +10,13 @@ permissions:
   pull-requests: write
 
 jobs:
-  # `pnpm size-limit` runs `pnpm build`, which runs `build:wasm`, which needs
-  # `hadolint.wasm` and its glue in the package root. Build them here rather
-  # than letting that step try to fetch them: on a fresh checkout there is
-  # nothing published to fetch, and the whole point is that the binary is ours.
+  # `pnpm size-limit` runs `pnpm build`, which starts with `check:wasm`, which
+  # needs `hadolint.wasm` and its glue in the package root. Nothing fetches them,
+  # so this job has to produce them.
   #
   # This workflow only triggers on pull requests to `main`, so it stayed
-  # invisible until the first PR was opened — the third consumer of `build:wasm`
-  # to be found by a red check rather than by looking for the others.
+  # invisible until the first PR was opened — the third consumer of the wasm
+  # artifact to be found by a red check rather than by looking for the others.
   wasm:
     name: Build hadolint.wasm
     permissions:
@@ -59,5 +58,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           skip_step: install
           script: pnpm size-limit --json
-        env:
-          HADOLINT_WASM_SKIP_FETCH: '1'

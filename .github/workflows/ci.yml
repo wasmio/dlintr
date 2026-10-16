@@ -95,9 +95,6 @@ jobs:
           # optional extra.
           DLINTR_REQUIRE_CLI: '1'
           EFF_NO_LINK_RULES: true
-          # `build:wasm` and `pretest` both run scripts/hadolint-wasm.mjs. The
-          # artifact is already in place here, so tell it not to fetch one.
-          HADOLINT_WASM_SKIP_FETCH: '1'
           PARSER_NO_WATCH: true
 
       - name: Codecov

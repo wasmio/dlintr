@@ -19,6 +19,9 @@ export default {
     '**/cabal.project',
     'coverage/**',
     'dist/**',
+    // cabal's build directory: it holds checked-out dependency sources, so it
+    // contains markdown and YAML the CSS parser would otherwise be handed.
+    '**/dist-newstyle/**',
     'LICENSE',
     // Patterns, not names. Naming artifacts individually has already trailed
     // three renames on this branch — `hadolint.wasm`, its `.sha256`, and the

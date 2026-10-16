@@ -94,60 +94,66 @@ first run that carries one is:
    the reusable `WASM` workflow, builds the binary, and hands the artifact to
    the test matrix in the same run — that path needs nothing published.
 2. Merge, and let the normal changesets flow release. On the publish run,
-   `release.yml` builds the binary, `pnpm release` packs it into the npm tarball,
-   and the artifact is then attached to the `v<version>` release changesets
-   creates.
-3. From that point `pnpm test` on a clean checkout fetches and verifies it.
+   `release.yml` builds the binary and `pnpm release` packs it into the npm
+   tarball.
+3. From that point on a consumer gets the binary from npm, and a local checkout
+   can build one with `wasm/build-reactor.sh`.
 
-Until step 2 there is nothing to download. Local runs are unaffected if the file
-is already on disk; the downloader says so and carries on rather than failing.
+Nothing is downloaded and nothing is attached to the release. Both `pretest` and
+`build` run `scripts/hadolint-wasm.mjs`, which checks that the two files are on
+disk and, when they are not, prints how to produce them. Local runs with the
+files already present are unaffected.
 
 ## Publishing, and changesets
 
 There is no separate release and no manual publish step. `release.yml` uses the
-existing `changesets/action` flow and adds two things:
+existing `changesets/action` flow and adds one thing:
 
-|             |                                                                |
-| ----------- | -------------------------------------------------------------- |
-| when        | only on the publish path — i.e. when no changesets are pending |
-| builds      | the same reusable `WASM` workflow `ci.yml` uses                |
-| attaches to | the release changesets creates, tagged `v<version>`            |
-| assets      | `hadolint.wasm`, `ghc_wasm_jsffi.js`, `hadolint.wasm.sha256`   |
+|        |                                                                |
+| ------ | -------------------------------------------------------------- |
+| when   | only on the publish path — i.e. when no changesets are pending |
+| builds | the same reusable `WASM` workflow `ci.yml` uses                |
 
 `changeset publish` is untouched: it still publishes to npm and still creates its
-own `v<version>` tag and release. All this adds is three assets to that release: the module, its glue, and the
-digest. The glue is not optional — the exports are unreachable without it.
+own `v<version>` tag and release. What changed from the previous design is what
+is **absent** — release assets.
 
-`scripts/hadolint-wasm.mjs` derives the URL from this package's own version, so
-no tag is hand-edited per release and `releases/latest` is never used — an older
-package keeps fetching its own artifact rather than a newer binary.
+An earlier version attached `hadolint.wasm`, `ghc_wasm_jsffi.js` and
+`hadolint.wasm.sha256` to the release, and had `scripts/hadolint-wasm.mjs` fetch
+them for `pretest`. That was removed because it bought nothing: a consumer
+already gets the module from npm, so the release copy served only the developer
+path — at the cost of a bootstrap cycle where `pretest` depended on an asset
+that exists only after the release it is meant to precede.
 
-### The digest
+### Why there is no digest check
 
-The digest is read from the `.sha256` published beside the artifact, and a
-mismatch is a hard error. It is deliberately **not** a constant in the script,
-because the build is not byte-reproducible. Two builds of the same commit and
-toolchain produced `82168e57a1dd722bfde49090849b75c26f58124e5a5f31cffdaf4200bcf9ab2c`
-and `64c2c74407a5a91750c2f82b79ea82e3d5a3e8d8449d5b45b3a664819bc872a9`.
+There was one, and it was retired rather than repaired, because **the build is
+not byte-reproducible**. Two builds of the same commit, the same toolchain, the
+same dependency versions and the same index-state, with no build cache between
+them, produced different bytes:
 
-That is not the Hackage index moving underneath the build: both runs recorded
-the same index-state (`2026-10-15T11:34:24Z`), resolved the same versions of
-every dependency, and `wasm-opt` is deterministic — repeated `-Oz --converge`
-runs on one input give one digest. The two artifacts are the same size to within
-two bytes and differ across the whole code section, so the nondeterminism is
-GHC's own. Pinning `index-state` would not fix it.
+```
+build 1  459d4d45a3497b2786f828f65628d501746acd48441b2a057649344d573fdddc
+build 2  ce9027d2abc9b9f6fc6717d2a511d9ad64af4ee65cb15fc2621bff5eeb16efcd
+```
 
-**What the digest guarantees:** corruption, truncation or a partially uploaded
-asset is caught, and an artifact that does not match what was published is
-refused.
+`wasm-opt` is ruled out — repeated `-Oz --converge` on one input gives one
+digest — so the nondeterminism is GHC's or `wasm-ld`'s, not ours to fix. A gate
+that presupposes reproducibility cannot pass on a build that lacks it, and a
+warning on a condition that is always true is indistinguishable from a check
+that never ran. The measurements are in
+[`upstream-report.md`](./upstream-report.md).
 
-**What it does not guarantee:** anyone able to replace both the artifact and its
-`.sha256` in the release. That is what the provenance attestation is for, and
-why both exist:
+**What actually guarantees the shipped binary:** npm's content-addressed,
+immutable tarball for _what_ was published, and the provenance attestation for
+_where it came from_:
 
 ```sh
 gh attestation verify hadolint.wasm -R wasmio/dlintr
 ```
+
+**What nothing guarantees:** that a rebuild would produce the same bytes. It
+would not.
 
 ## Two traps in this repository
 
@@ -208,11 +214,12 @@ node wasm/calls.mjs              # what WASI imports it actually calls
 node wasm/smoke.mjs hadolint.wasm # only for the *command* build, see below
 ```
 
-To test against a binary you built yourself, put it in place and tell the
-downloader not to fetch one:
+To test against a binary you built yourself, put it in place — `build-reactor.sh`
+already writes to the package root — and run the suite. Nothing is fetched, so
+there is no skip flag to remember:
 
 ```sh
-HADOLINT_WASM_SKIP_FETCH=1 pnpm test
+pnpm test
 ```
 
 ## Updating hadolint

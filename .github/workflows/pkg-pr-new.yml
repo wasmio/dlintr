@@ -21,11 +21,10 @@ permissions:
   contents: read
 
 jobs:
-  # `pnpm build` runs `build:wasm`, which needs `hadolint.wasm` in the package
-  # root. Build it here too rather than letting that step try to fetch one: on a
-  # fresh checkout there is nothing published to fetch, and the whole point is
-  # that the binary is ours. The cache means this is a hit whenever `ci.yml` has
-  # already built the same revision.
+  # `pnpm build` starts with `check:wasm`, which needs `hadolint.wasm` and its
+  # glue in the package root. They are build artifacts and nothing fetches them,
+  # so this job has to produce them. The cache means it is a hit whenever
+  # `ci.yml` has already built the same revision.
   wasm:
     name: Build hadolint.wasm
     permissions:
@@ -60,8 +59,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-        env:
-          HADOLINT_WASM_SKIP_FETCH: '1'
 
       - name: Publish
         run: pnpm dlx pkg-pr-new publish --pnpm

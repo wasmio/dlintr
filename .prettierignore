@@ -2,6 +2,7 @@
 .vercel
 coverage
 dist
+**/dist-newstyle
 lib
 /auto-imports.d.ts
 /pnpm-lock.yaml

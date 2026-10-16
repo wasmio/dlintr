@@ -7,6 +7,8 @@ export default [
       'CHANGELOG.md',
       'coverage',
       'dist',
+      // cabal's build directory, wherever a local `wasm/build*.sh` leaves one.
+      '**/dist-newstyle',
       // Patterns, not names: see the note in `stylelint.config.js`. The glue
       // stays by name because it *is* a `.js` file, and a glob could not tell
       // it apart from source that should be linted.
