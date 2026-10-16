@@ -8,7 +8,7 @@
  * build's digest is one that has been seen before.
  *
  * Kept as an instrument because eight distinct outputs from one pinned source is
- * the evidence for `wasm/UPSTREAM-REPORT.md`, and because the next person to
+ * the evidence for `wasm/upstream-report.md`, and because the next person to
  * doubt the claim should be able to reproduce the observation rather than take
  * it on trust.
  *
