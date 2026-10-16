@@ -19,10 +19,9 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "run-p build:r build:tsc",
+    "build": "run-p build:*",
     "build:r": "r -f cjs",
     "build:tsc": "tsc -p src",
-    "build:wasm": "bash wasm/build-reactor.sh",
     "dev": "vitest",
     "docs:build": "vite build docs",
     "docs:dev": "vite docs",
@@ -38,7 +37,8 @@
     "test": "vitest run --coverage",
     "typecov": "type-coverage",
     "version": "changeset version",
-    "postversion": "pnpm i --no-frozen-lockfile"
+    "postversion": "pnpm i --no-frozen-lockfile",
+    "wasm:build": "bash wasm/build-reactor.sh"
   },
   "dependencies": {
     "tslib": "^2.4.0"

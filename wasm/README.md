@@ -21,7 +21,7 @@ There is one source, and it is this repository:
    (the command, for the test). Every job that needs a binary downloads the
    artifact rather than building another one, which is why building it is
    deliberately not part of `pnpm build`.
-3. `pnpm build:wasm` runs `wasm/build-reactor.sh` for a local checkout. Nothing
+3. `pnpm wasm:build` runs `wasm/build-reactor.sh` for a local checkout. Nothing
    fetches a binary from anywhere, and nothing is attached to a release.
 
 ### Why not upstream's own wasm build
@@ -216,15 +216,16 @@ FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 source ~/.ghc-wasm/env
 
 git submodule update --init
-pnpm build:wasm                  # `bash wasm/build-reactor.sh`; writes both files
+pnpm wasm:build                  # `bash wasm/build-reactor.sh`; writes both files
 node wasm/calls.mjs              # what WASI imports it actually calls
 node wasm/smoke.mjs hadolint.wasm # only for the *command* build, see below
 ```
 
-`build:wasm` is deliberately **not** part of `pnpm build`. It needs a toolchain
-that a contributor and a Windows runner may not have, and in CI the binary is
-built once by the `WASM` workflow and downloaded, so folding it in would make
-every ordinary build pay for a compiler or fail without one.
+`wasm:build` is named so that it is **not** part of `pnpm build`, and the
+`build:*` glob cannot pick it up by accident. It needs a toolchain that a
+contributor and a Windows runner may not have, and in CI the binary is built once
+by the `WASM` workflow and downloaded, so folding it in would make every ordinary
+build pay for a compiler or fail without one.
 
 To test against a binary you built yourself, put it in place — `build-reactor.sh`
 already writes to the package root — and run the suite. Nothing is fetched, so
