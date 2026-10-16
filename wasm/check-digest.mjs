@@ -1,15 +1,16 @@
 /**
- * Is this build's wasm the one that identical inputs produced before?
+ * What has this recipe actually produced before?
  *
- * The build is *usually* reproducible and occasionally diverges, and the
- * divergence is the interesting event: a module that differs for identical
- * inputs is either nondeterminism worth knowing about or corruption. This
- * records a digest per (submodule revision, recipe hash) and fails when a build
- * disagrees with it.
+ * Identical inputs do **not** reliably produce identical bytes here: two
+ * from-scratch builds of one recipe, with no build cache and the toolchain
+ * identical, produced different modules. So this is not a gate and the workflow
+ * does not run it. It records observations, and reports whether the current
+ * build's digest is one that has been seen before.
  *
- * It is justified by anomaly detection on its own. A divergent build is *also*
- * the one so far observed to crash a test runner, but that rests on a single
- * sample and nothing here depends on it.
+ * Kept as an instrument because eight distinct outputs from one pinned source is
+ * the evidence for `wasm/UPSTREAM-REPORT.md`, and because the next person to
+ * doubt the claim should be able to reproduce the observation rather than take
+ * it on trust.
  *
  * Usage:
  *   node wasm/check-digest.mjs <observed-sha256>
@@ -23,34 +24,22 @@ import { fileURLToPath } from 'node:url'
 
 const wasmDir = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(wasmDir, '..')
-const manifest = path.join(wasmDir, 'digests.json')
+const history = path.join(wasmDir, 'digests.json')
 
 /** Enough of the hash to identify a recipe without quoting a wall of hex. */
 const RECIPE_HASH_LENGTH = 16
 
 /**
- * The files that decide the reactor's bytes, named explicitly.
+ * The files that decide the reactor's bytes, named explicitly — the same list
+ * the build cache in `wasm.yml` is keyed on. The two must stay in step, or a
+ * cache that moves when the recipe does not makes the history unreadable.
  *
- * Explicit rather than a walk, for two reasons in opposite directions. A walk
- * over `wasm/` misses `.github/workflows/wasm.yml`, which is where the GHC
- * bindist and Binaryen pins live — so a toolchain bump would leave the hash
- * unchanged, the newly built digest would differ correctly, and the check would
- * report **drift**: crying wolf on exactly the deliberate change it must allow,
- * and inviting the override that kills a canary. And a walk also sweeps in
- * `wasm/README.md`, `wasm/calls.mjs` and local `dist-newstyle` trees, which
- * cannot change a byte — the opposite failure, a hash that moves for edits which
- * mean nothing.
- *
- * `wasm/build.sh` and `hadolint-wasm32-cli.patch` are absent on purpose: they
- * build the *command*, which is the reference the format test compares against,
- * not the reactor whose digest this keys.
+ * `wasm/build.sh` and the CLI patch are absent on purpose: they build the
+ * command*, which the format test compares against, not this reactor.
  */
 const RECIPE_INPUTS = [
-  // The toolchain pins, and the wiring that consumes them.
   '.github/workflows/wasm.yml',
-  // How the reactor is built.
   'wasm/build-reactor.sh',
-  // The wrapper itself.
   'wasm/hadolint-wasi/cabal.project',
   'wasm/hadolint-wasi/hadolint-wasi.cabal',
   'wasm/hadolint-wasi/Main.hs',
@@ -65,6 +54,10 @@ const recipeFiles = () =>
 /**
  * Computed here rather than with GitHub's `hashFiles`, so the same key can be
  * derived locally — which is what makes `--record` meaningful off CI.
+ *
+ * Compute it **after every other change in the commit**: it is correct when
+ * computed and stale on arrival, because any later edit to a recipe file moves
+ * it.
  *
  * @returns {string} A short, stable hash of the recipe.
  */
@@ -85,8 +78,8 @@ const recipeHash = () => {
  * @returns {string} The pinned hadolint revision.
  */
 const submoduleRevision = () =>
-  // A fixed command name, not a lookup through a writable PATH, which is
-  // what the rule guards against.
+  // A fixed command name, not a lookup through a writable PATH, which is what
+  // the rule guards against.
   // eslint-disable-next-line sonarjs/no-os-command-from-path
   execFileSync('git', ['-C', root, 'rev-parse', 'HEAD:hadolint'])
     .toString()
@@ -95,78 +88,53 @@ const submoduleRevision = () =>
 const main = () => {
   const args = process.argv.slice(2)
   const record = args.includes('--record')
-  const observed = args.find(argument => !argument.startsWith('--'))
+  const observedDigest = args.find(argument => !argument.startsWith('--'))
 
-  if (!observed || !/^[0-9a-f]{64}$/.test(observed)) {
+  if (!observedDigest || !/^[0-9a-f]{64}$/.test(observedDigest)) {
     console.error('usage: node wasm/check-digest.mjs [--record] <sha256>')
     return 2
   }
 
   const key = `${submoduleRevision()}:${recipeHash()}`
-  const digests = JSON.parse(readFileSync(manifest, 'utf8'))
-  const recorded = digests[key]
+  const digests = JSON.parse(readFileSync(history, 'utf8'))
+  const entry = digests[key]
 
   if (record) {
-    digests[key] = { sha256: observed, hadolint: digests[key]?.hadolint ?? '' }
-    writeFileSync(manifest, `${JSON.stringify(digests, null, 2)}\n`)
-    console.log(`recorded ${key} -> ${observed}`)
+    const observed = entry?.observed ?? []
+    if (!observed.includes(observedDigest)) {
+      observed.push(observedDigest)
+    }
+    digests[key] = { hadolint: entry?.hadolint ?? '', observed }
+    writeFileSync(history, `${JSON.stringify(digests, null, 2)}\n`)
+    console.log(`recorded ${key} -> ${observedDigest}`)
     return 0
   }
 
-  if (!recorded) {
+  if (!entry) {
+    console.log(
+      `${key} has no history yet; this is the first build of it.\n\n  observed  ${observedDigest}`,
+    )
+  } else if (entry.observed.includes(observedDigest)) {
+    console.log(
+      `${key} has produced this digest before (1 of ${entry.observed.length} on record).\n\n  observed  ${observedDigest}`,
+    )
+  } else {
     console.log(
       [
-        `No digest recorded for ${key}.`,
+        `${key} has not produced this digest before.`,
         '',
-        'This fails rather than passing with a notice, deliberately. An unrecorded',
-        'key means the canary is inert: the check runs, reports nothing, and looks',
-        'green — which is how this repository shipped a stale manifest and believed',
-        'the canary was working. A green step is not a firing check.',
+        `  observed  ${observedDigest}`,
+        `  on record ${entry.observed.length}, none equal to it`,
         '',
-        'Recording the manifest is part of changing the recipe deliberately, so do',
-        'that and commit it alongside the change:',
+        'Expected, not a failure: the build is not reproducible. To add it to the',
+        'history anyway:',
         '',
-        `  node wasm/check-digest.mjs --record ${observed}`,
-        '',
-        `  key       ${key}`,
-        `  observed  ${observed}`,
+        `  node wasm/check-digest.mjs --record ${observedDigest}`,
       ].join('\n'),
     )
-    return 1
   }
 
-  if (recorded.sha256 === observed) {
-    console.log(`wasm digest matches the recorded value for ${key}`)
-    return 0
-  }
-
-  console.log(
-    [
-      'This is a divergence, and it deliberately stops the build.',
-      '',
-      `  inputs    ${key}`,
-      `  recorded  ${recorded.sha256}`,
-      `  observed  ${observed}`,
-      '',
-      'Identical inputs are expected to produce identical bytes. Usually they do.',
-      'When they do not, either something under wasm/ changed without the recipe',
-      'hash moving, or the toolchain produced a different binary from the same',
-      'source — and a build that differs for no reason is worth understanding',
-      'before it is published.',
-      '',
-      'If you have looked and the difference is expected:',
-      '',
-      '  1. record it, so the next build is compared against this one:',
-      `       node wasm/check-digest.mjs --record ${observed}`,
-      '     and commit wasm/digests.json with whatever caused it;',
-      '',
-      '  2. or proceed without recording by re-running the WASM workflow with the',
-      '     `allow_digest_drift` input set to true. That is visible in the run and',
-      '     in the job log, and it does not change the recorded value.',
-    ].join('\n'),
-  )
-
-  return process.env.WASM_DIGEST_ALLOW_DRIFT === 'true' ? 0 : 1
+  return 0
 }
 
 process.exitCode = main()

@@ -125,26 +125,22 @@ Two things follow, stated plainly:
   rather than a wrong answer — better than silent corruption, but not the same
   guarantee a maintained WASI library gives.
 
-### Why the build is checked for drift
+### The digest, and what it does not promise
 
-The wasm is built by this repository, and identical inputs are _expected_ to
-produce identical bytes. Usually they do. Occasionally they do not, and that is
-worth stopping for: either something under `wasm/` changed without the recipe
-hash moving, or the toolchain produced a different binary from the same source.
+Each release carries a `.sha256` for `hadolint.wasm`, and the build is attested.
+**The digest identifies a build; it does not guarantee one.**
 
-`wasm/digests.json` records a digest per (submodule revision, recipe hash), and
-`wasm.yml` fails when a build disagrees with the recorded value, before
-anything is attested or uploaded. The message names both digests and the two
-ways forward.
+This module is **not reproducible**. Two from-scratch builds of the same source,
+with the same toolchain and no build cache, produce different bytes — eight
+distinct digests are on record for one pinned revision of hadolint. So the
+digest is useful for telling one published artifact from another and for tying an
+artifact to its attestation, and for nothing stronger than that.
 
-This is a **drift check**, justified on its own terms: a build that differs for
-identical inputs is either nondeterminism worth knowing about or corruption.
-A divergent build is _also_ the only one so far observed to crash a test runner
-on Windows, but that rests on a single sample — **the check is not claimed to
-catch that, and it will not be until the correlation is actually shown.**
-
-The recorded value is not a reproducibility guarantee. It is the digest this
-combination produced the last time anyone looked.
+An earlier version of this repository used the digest as a drift gate, comparing
+each build against a recorded value and failing on a mismatch. It was retired,
+because it failed on every run: a gate that presupposes a property the build does
+not have is not a gate. `wasm/digests.json` is kept as history of what identical
+inputs have produced, and `wasm/upstream-report.md` is the draft finding.
 
 ## Sponsors
 

@@ -41,33 +41,49 @@ Upstream also marks `exe:hadolint` as `buildable: False` on wasm32 and passes it
 commit and **must be rebased whenever `hadolint` moves**; `build.sh`
 fails loudly if it stops applying.
 
-## The digest manifest
+## The digest history
 
-`wasm/digests.json` keys a digest on `<submodule revision>:<recipe hash>`. The
-recipe hash covers an **explicit list** — `.github/workflows/wasm.yml`,
-`wasm/build-reactor.sh`, `wasm/hadolint-wasi/cabal.project`, its `.cabal` and
-`Main.hs` — and the build cache in `wasm.yml` is keyed on the same list. Those
-two must be kept in step: the cache is part of what decides the bytes, so a cache
-key that moves when the recipe does not makes the canary report drift for a build
-that changed only because its cache did.
+**The build is not reproducible, and no digest is a guarantee.** Two from-scratch
+builds of one recipe — build cache deleted for both, toolchain cache hit for
+both, the cache miss quoted in the job log — produced different modules. Eight
+distinct sha256 values are on record for one pinned submodule revision.
 
-Two traps, both learned by falling into them.
+`wasm/digests.json` is therefore **history, not a reference value**: it lists
+what identical inputs have actually produced. Nothing compares against it and
+nothing fails on a mismatch, because that would fail on every run. An earlier
+version of this file was a gate; it was retired for exactly that reason.
 
-**Compute the key after every other change in the commit.** It is correct when
-computed and stale on arrival, because any later edit to a recipe file moves it.
-Recorded once before two subsequent `wasm.yml` edits, it silently stopped
-matching, and the check took its _unrecorded_ path — which passed with a notice,
-so the step reported success and looked verified.
+`wasm/check-digest.mjs <sha256>` reports whether a digest has been seen before
+and always exits 0; `--record` appends. The recipe key it computes covers an
+**explicit list** — `.github/workflows/wasm.yml`, `wasm/build-reactor.sh`, and
+the wrapper's `cabal.project`, `.cabal` and `Main.hs` — and the build cache in
+`wasm.yml` is keyed on the same list. **The two must stay in step**: a cache that
+moves when the recipe does not makes the history unreadable.
 
-**A recipe hash that refuses to move is a signal.** A batch of edits that applies
-four of six changes, skipping two because a script exited on an earlier failed
-anchor, is caught by the hash not changing when a recipe file did. That is the
-same class as the trap above: a step that looks done.
+`wasm/upstream-report.md` is the draft finding. Eight outputs from one source is
+evidence, and evidence is what an upstream report needs.
 
-`wasm/check-digest.mjs --record <sha256>` writes an entry; without `--record` it
-compares, and **fails on an unrecorded key** rather than passing. An unrecorded
-key means the canary cannot fire, and a canary that cannot fire while reporting
-green is worse than none — it is a green signal meaning "did not run".
+### Traps this cost, all the same shape
+
+Every one of these was a signal that looked like success and meant "did not
+run". Recorded together, because the pattern rather than the individual bug is
+what to watch for:
+
+1. **Compute the recipe key after every other change in the commit.** It is
+   correct when computed and stale on arrival. Recorded once before two later
+   `wasm.yml` edits, it silently stopped matching, and the check took its
+   _unrecorded_ path — which passed with a notice, so the step reported success
+   and looked verified.
+2. **A recipe hash that refuses to move is a signal.** A batch of edits that
+   applies four of six changes, skipping two because a script exited on an
+   earlier failed anchor, is caught by the hash not changing when a recipe file
+   did. That is the same class as the trap above: a step that looks done.
+3. **A green step is not a firing check.** The drift check reported `success`
+   for its entire life while taking the path that compared nothing.
+4. **Cleaning a comment can break a step.** A file-wide backtick `sed` intended
+   for a YAML comment stripped the escapes from the step summary's `echo` lines,
+   turning Markdown into command substitution — `v2.15.1: command not found`.
+   Found by reading the log rather than the conclusion.
 
 ## Bootstrapping
 
