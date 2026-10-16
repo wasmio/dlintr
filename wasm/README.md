@@ -222,6 +222,28 @@ there is no skip flag to remember:
 pnpm test
 ```
 
+### Windows
+
+There is no native path. `ghc-wasm-meta`'s `setup.sh` branches on Linux and
+macOS hosts only, so the toolchain cannot be installed on Windows at all — and
+neither this file nor upstream's says otherwise.
+
+A Windows contributor does not need to build the module. CI already did:
+
+```sh
+gh run download --repo wasmio/dlintr --name hadolint-wasm
+```
+
+A published npm tarball carries both files as well (`npm pack dlintr`). To build
+one anyway, use WSL2 and check out inside the Linux filesystem rather than under
+`/mnt/c`.
+
+That asymmetry is exactly why CI builds this once and shares it as an artifact
+instead of each matrix leg building its own. The Windows legs cannot produce it,
+but `test/reactor.spec.ts` needs it — so the artifact path has to exist, and
+once it does, having the other eight legs build a second copy of a
+host-independent wasm module is only cost.
+
 ## Updating hadolint
 
 ```sh

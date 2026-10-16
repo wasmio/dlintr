@@ -38,6 +38,42 @@ const artifacts = ['hadolint.wasm', 'ghc_wasm_jsffi.js']
 
 const missing = artifacts.filter(name => !existsSync(path.join(root, name)))
 
+/**
+ * How to obtain the artifacts, which depends on whether this host can build
+ * them at all.
+ *
+ * `ghc-wasm-meta` ships GHC wasm bindists for Linux and macOS hosts only.
+ * There is no Windows branch in its `setup.sh`, so telling a Windows
+ * contributor to source an env script would be advice they cannot take.
+ *
+ * @returns {string[]} Lines describing the routes available on this platform.
+ */
+const howTo = () =>
+  process.platform === 'win32'
+    ? [
+        'There is no native Windows toolchain — `ghc-wasm-meta` ships bindists',
+        'for Linux and macOS hosts only. Two ways to get a pair:',
+        '',
+        '  - Build them under WSL2, from a checkout inside the Linux filesystem',
+        '    rather than under /mnt/c, following wasm/README.md from the',
+        '    `git submodule update --init` step on.',
+        '',
+        '  - Or take a pair CI already built, rather than building one:',
+        '',
+        '      gh run download --repo wasmio/dlintr --name hadolint-wasm',
+        '',
+        '    A published npm tarball carries both files as well:',
+        '',
+        '      npm pack dlintr && tar xzf dlintr-*.tgz',
+      ]
+    : [
+        'To produce them locally:',
+        '',
+        '  git submodule update --init',
+        '  source ~/.ghc-wasm/env          # or install it — see wasm/README.md',
+        '  bash wasm/build-reactor.sh',
+      ]
+
 if (missing.length > 0) {
   throw new Error(
     [
@@ -45,15 +81,11 @@ if (missing.length > 0) {
         missing.length > 1 ? 's' : ''
       }: ${missing.join(', ')}`,
       '',
-      'These are build artifacts, not source, so they are neither committed nor',
-      'downloaded. CI compiles them in the `WASM` workflow and passes them to the',
-      'job that needs them; the npm tarball carries them to consumers.',
+      'These are build artifacts, not source: not committed, and nothing fetches',
+      'them. CI compiles them in the `WASM` workflow and passes them to the job',
+      'that needs them; the npm tarball carries them to consumers.',
       '',
-      'To produce them locally:',
-      '',
-      '  git submodule update --init',
-      '  source ~/.ghc-wasm/env          # or install it — see wasm/README.md',
-      '  bash wasm/build-reactor.sh',
+      ...howTo(),
     ].join('\n'),
   )
 }
