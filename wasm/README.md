@@ -216,10 +216,17 @@ FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 source ~/.ghc-wasm/env
 
 git submodule update --init
-pnpm wasm:build                  # `bash wasm/build-reactor.sh`; writes both files
-node wasm/calls.mjs              # what WASI imports it actually calls
-node wasm/smoke.mjs hadolint-cli.wasm # only for the *command* build, see below
+pnpm wasm:build                       # the reactor: hadolint.wasm + ghc_wasm_jsffi.js
+bash wasm/build.sh hadolint-cli.wasm  # the command build the format test compares against
+node wasm/calls.mjs                   # what WASI imports the reactor actually calls
+node wasm/smoke.mjs hadolint-cli.wasm # starts the command build and checks it runs
 ```
+
+Both builds are needed for the local suite: `hadolint.wasm` is what ships and what
+the reactor tests load, while `hadolint-cli.wasm` is the same source built as a
+command, which `test/reactor.spec.ts` runs to assert the two agree byte for byte.
+`smoke.mjs` checks the _command_ build, so it takes that file — it fails its
+`_start` check on a reactor, which exports `_initialize` instead.
 
 `wasm:build` is named so that it is **not** part of `pnpm build`, and the
 `build:*` glob cannot pick it up by accident. It needs a toolchain that a
