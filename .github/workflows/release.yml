@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - main
+  # The only route to the digest override, and it is deliberately manual.
+  # Dispatch inputs are recorded on the run, so "publish despite the drift" is a
+  # traceable decision by a person rather than an edit to this file — which
+  # would leave no record of intent at all.
+  workflow_dispatch:
+    inputs:
+      allow_digest_drift:
+        description: >-
+          Publish even if the wasm differs from the recorded digest for
+          identical inputs. Check the run's wasm job for both digests first.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,6 +56,8 @@ jobs:
       id-token: write
       attestations: write
     uses: ./.github/workflows/wasm.yml
+    with:
+      allow_digest_drift: ${{ inputs.allow_digest_drift || false }}
 
   release:
     name: Release

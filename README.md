@@ -82,7 +82,8 @@ backend and called in-process; there is no native binary and no Docker. The
 module is instantiated once and `lint` is called on it.
 
 **This is a breaking change from 0.1.x.** The module previously exposed
-hadolint's command-line interface, and now exports one function:
+hadolint's command-line interface, and now exports `lint()` and
+`getVersion():`
 
 - **`run()` is gone**, and with it the whole CLI surface. `--failure-threshold`,
   `--config`, `--format`, `--no-color` and the rest are no longer reachable

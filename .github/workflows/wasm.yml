@@ -12,7 +12,15 @@ name: WASM
 # commit and this recipe, so the expensive path runs when the inputs change and
 # not on every push.
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      allow_digest_drift:
+        description: >-
+          Proceed even though this build's wasm differs from the recorded digest
+          for identical inputs. Only Release passes this, and only when a human
+          asked for it; see the note on the check step.
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       allow_digest_drift:
@@ -351,6 +359,19 @@ jobs:
           node wasm/check-digest.mjs "${{ steps.wasm.outputs.digest }}"
         env:
           WASM_DIGEST_ALLOW_DRIFT: ${{ inputs.allow_digest_drift && 'true' || 'false' }}
+      #
+      # Which callers may set `allow_digest_drift`: **Release, and nothing else.**
+      # `ci.yml`, the preview publish and `size-limit.yml` leave it unset, so they
+      # stay strict on purpose — drift is worth finding while a change is being
+      # reviewed, and a gate that every caller can open is not a gate. Release is
+      # the one path where the alternative to proceeding is not shipping at all,
+      # and reaching it takes a person dispatching the workflow, which is the
+      # visible act.
+      #
+      # Note this is *not* how a deliberate toolchain bump proceeds: that changes
+      # the recipe hash, so it reads as an unrecorded combination and passes with
+      # a notice. The override is only for the same inputs producing different
+      # bytes, which is the case nobody can explain.
 
       # Fork pull requests get a read-only token, so signing is not available.
       - name: Attest Build Provenance

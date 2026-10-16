@@ -17,7 +17,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -29,33 +29,38 @@ const manifest = path.join(wasmDir, 'digests.json')
 const RECIPE_HASH_LENGTH = 16
 
 /**
- * The recipe, as a hash over the files that decide the binary.
+ * The files that decide the reactor's bytes, named explicitly.
  *
- * @returns {string[]} Absolute paths of the recipe files, sorted.
+ * Explicit rather than a walk, for two reasons in opposite directions. A walk
+ * over `wasm/` misses `.github/workflows/wasm.yml`, which is where the GHC
+ * bindist and Binaryen pins live — so a toolchain bump would leave the hash
+ * unchanged, the newly built digest would differ correctly, and the check would
+ * report **drift**: crying wolf on exactly the deliberate change it must allow,
+ * and inviting the override that kills a canary. And a walk also sweeps in
+ * `wasm/README.md`, `wasm/calls.mjs` and local `dist-newstyle` trees, which
+ * cannot change a byte — the opposite failure, a hash that moves for edits which
+ * mean nothing.
+ *
+ * `wasm/build.sh` and `hadolint-wasm32-cli.patch` are absent on purpose: they
+ * build the *command*, which is the reference the format test compares against,
+ * not the reactor whose digest this keys.
  */
-const recipeFiles = () => {
-  /** @type {string[]} */
-  const out = []
-  /** @param {string} dir */
-  const walk = dir => {
-    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name)
-      if (entry.isDirectory()) {
-        walk(full)
-      } else if (
-        !entry.name.endsWith('.json') &&
-        !entry.name.endsWith('.mjs')
-      ) {
-        out.push(full)
-      }
-    }
-  }
-  walk(wasmDir)
-  return out.sort()
-}
+const RECIPE_INPUTS = [
+  // The toolchain pins, and the wiring that consumes them.
+  '.github/workflows/wasm.yml',
+  // How the reactor is built.
+  'wasm/build-reactor.sh',
+  // The wrapper itself.
+  'wasm/hadolint-wasi/cabal.project',
+  'wasm/hadolint-wasi/hadolint-wasi.cabal',
+  'wasm/hadolint-wasi/Main.hs',
+]
+
+/**
+ * @returns {string[]} Absolute paths of the recipe inputs.
+ */
+const recipeFiles = () =>
+  RECIPE_INPUTS.map(relative => path.join(root, relative)).sort()
 
 /**
  * Computed here rather than with GitHub's `hashFiles`, so the same key can be
