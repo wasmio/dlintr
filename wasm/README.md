@@ -68,10 +68,11 @@ existing `changesets/action` flow and adds two things:
 | when        | only on the publish path — i.e. when no changesets are pending |
 | builds      | the same reusable `WASM` workflow `ci.yml` uses                |
 | attaches to | the release changesets creates, tagged `v<version>`            |
-| assets      | `hadolint.wasm`, `hadolint.wasm.sha256`                        |
+| assets      | `hadolint.wasm`, `ghc_wasm_jsffi.js`, `hadolint.wasm.sha256`   |
 
 `changeset publish` is untouched: it still publishes to npm and still creates its
-own `v<version>` tag and release. All this adds is two assets to that release.
+own `v<version>` tag and release. All this adds is three assets to that release: the module, its glue, and the
+digest. The glue is not optional — the exports are unreachable without it.
 
 `scripts/hadolint-wasm.mjs` derives the URL from this package's own version, so
 no tag is hand-edited per release and `releases/latest` is never used — an older

@@ -118,18 +118,21 @@ const main = () => {
       [
         `No digest recorded for ${key}.`,
         '',
-        'That is not a divergence — it is a combination nobody has recorded yet,',
-        'which is what every submodule bump or recipe change looks like the first',
-        'time. The build is unaffected.',
+        'This fails rather than passing with a notice, deliberately. An unrecorded',
+        'key means the canary is inert: the check runs, reports nothing, and looks',
+        'green — which is how this repository shipped a stale manifest and believed',
+        'the canary was working. A green step is not a firing check.',
         '',
-        'To have this combination checked from now on:',
+        'Recording the manifest is part of changing the recipe deliberately, so do',
+        'that and commit it alongside the change:',
         '',
         `  node wasm/check-digest.mjs --record ${observed}`,
         '',
-        'and commit wasm/digests.json with your change.',
+        `  key       ${key}`,
+        `  observed  ${observed}`,
       ].join('\n'),
     )
-    return 0
+    return 1
   }
 
   if (recorded.sha256 === observed) {

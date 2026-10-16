@@ -14,7 +14,7 @@
 #   ghc_wasm_jsffi.js GHC's JS half of the JSFFI, without which the exports
 #                     cannot be called at all
 #
-# __Unverified: this has never been run successfully.__ It exists so CI can try.
+# CI builds this on every run, and the byte-equality test exercises the result.
 #
 # Usage: wasm/build-reactor.sh [output.wasm] [ghc_wasm_jsffi.js]
 set -euo pipefail
