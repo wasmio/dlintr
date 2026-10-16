@@ -46,26 +46,21 @@ fails loudly if it stops applying.
 **The build is not reproducible, and no digest is a guarantee.** Two from-scratch
 builds of one recipe — build cache deleted for both, toolchain cache hit for
 both, the cache miss quoted in the job log — produced different modules. Eight
-distinct sha256 values are on record for one pinned submodule revision.
+distinct sha256 values were observed for one pinned submodule revision.
 
-`wasm/digests.json` is therefore **history, not a reference value**: it lists
-what identical inputs have actually produced. Nothing compares against it and
-nothing fails on a mismatch, because that would fail on every run. An earlier
-version of this file was a gate; it was retired for exactly that reason.
-
-The observations are grouped by recipe. Each entry names the hadolint version
-and lists every digest that recipe has produced — two, four and two across the
-three recorded recipes. That grouping _is_ the argument, and it reads without
-recomputing anything:
-
-```sh
-node -e 'const d=require("./wasm/digests.json");for(const[k,v]of Object.entries(d))if(k!=="_")console.log(k.split(":")[1],v.observed.length)'
-```
+An earlier version of this repository **gated** on those digests, comparing every
+build against a recorded value and failing on a mismatch. It was retired rather
+than repaired: a gate that presupposes reproducibility cannot pass on a build
+that does not have it, and a warning on a condition that is always true is
+indistinguishable from a check that never ran.
 
 `wasm/upstream-report.md` is the finding as filed —
-[`haskell-wasm/ghc-wasm-bindists#49`](https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49).
-Eight outputs from one source is evidence, and evidence is what an upstream
-report needs.
+[`haskell-wasm/ghc-wasm-bindists#49`](https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49)
+— and it carries every observed digest inline, including the pair from one
+recipe that is the decisive part. There is deliberately **no manifest here**:
+the digest gate is gone, so nothing would read or append to one, and a second
+copy of evidence that already lives in the filed report can only drift out of
+step with it.
 
 ### Traps this cost, all the same shape
 

@@ -124,12 +124,12 @@ jobs:
           # An explicit list, not `wasm/**`, because only these five files can
           # change a compiled byte.
           #
-          # It was `wasm/**`, which included this canary's own manifest:
-          # recording a digest edited `wasm/digests.json`, that changed this
-          # key, that changed the incremental state of `dist-newstyle`, that
-          # produced different bytes — which the canary then reported as drift.
-          # The manifest was an input to the build it measures, so a recorded
-          # digest could never be stable.
+          # It was `wasm/**`, which swept in the manifest of the digest canary
+          # that has since been retired: recording an observation edited that
+          # manifest, which changed this key, which changed the incremental state
+          # of `dist-newstyle`, which produced different bytes — which the canary
+          # then reported as drift. The manifest was an input to the build it
+          # measured, so a recorded digest could never be stable.
           #
           # It also swept in `README.md`, `calls.mjs` and `smoke.mjs`, none of
           # which can change a compiled byte.

@@ -118,8 +118,7 @@ what was published. We retired the check rather than leave it failing.
 The build is driven by `.github/workflows/wasm.yml` in
 `https://github.com/wasmio/dlintr` (`feat/wasm-ci-build`). Delete the
 `wasm-build-*` cache entries, run the workflow twice, and compare the
-`hadolint.wasm sha256:` line each run logs. `wasm/digests.json` holds the
-accumulated observations, grouped by recipe.
+`hadolint.wasm sha256:` line each run logs.
 
 Happy to run further experiments — bisecting the link flags, comparing
 `wasm-ld` output before optimisation, or reducing to a minimal module — if that

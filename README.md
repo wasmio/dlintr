@@ -142,9 +142,8 @@ artifact to its attestation, and for nothing stronger than that.
 An earlier version of this repository used the digest as a drift gate, comparing
 each build against a recorded value and failing on a mismatch. It was retired,
 because it failed on every run: a gate that presupposes a property the build does
-not have is not a gate. `wasm/digests.json` is kept as history of what identical
-inputs have produced, and the measurements are written up in
-`wasm/upstream-report.md` and filed upstream as
+not have is not a gate. The measurements are written up in
+[`wasm/upstream-report.md`](./wasm/upstream-report.md) and filed upstream as
 [haskell-wasm/ghc-wasm-bindists#49](https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49).
 
 ## Sponsors
