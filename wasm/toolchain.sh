@@ -131,7 +131,25 @@ fi
 
 echo "wasm: checking the $GHC_WASM_BINDIST_TAG bindist digest"
 bindist_url="https://api.github.com/repos/haskell-wasm/ghc-wasm-bindists/releases/tags/$GHC_WASM_BINDIST_TAG"
-published="$(curl -fsSL ${api_auth[@]+"${api_auth[@]}"} "$bindist_url" \
+# The status code is captured rather than left to `curl -f`, because a 403 here
+# means something specific and unguessable from `curl: (56) ... error: 403`: the
+# anonymous allowance is per IP, and CI runs a dozen of these at once from shared
+# runner addresses. It cost a red macOS leg to learn that.
+if ! response="$(curl -sSL ${api_auth[@]+"${api_auth[@]}"} -w '\n%{http_code}' "$bindist_url")"; then
+  echo "wasm: could not reach the GitHub API for the bindist release" >&2
+  exit 1
+fi
+code="${response##*$'\n'}"
+body="${response%$'\n'*}"
+if [ "$code" != "200" ]; then
+  echo "wasm: the GitHub API returned $code for the bindist release" >&2
+  if [ "$code" = "403" ] && [ ${#api_auth[@]} -eq 0 ]; then
+    echo "wasm: that is the anonymous rate limit, which is per IP — set GH_TOKEN or GITHUB_TOKEN" >&2
+  fi
+  exit 1
+fi
+
+published="$(printf '%s' "$body" \
   | jq -r '.assets[] | select(.name == "wasm32-wasi-ghc-9.10.tar.xz") | .digest')"
 if [ "sha256:$GHC_WASM_BINDIST_SHA256" != "$published" ]; then
   echo "wasm: bindist digest is '$published', expected 'sha256:$GHC_WASM_BINDIST_SHA256'" >&2

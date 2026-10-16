@@ -35,9 +35,15 @@ runs:
           ~/.cabal
         key: wasm-toolchain-${{ runner.os }}-${{ hashFiles('wasm/toolchain.sh') }}
 
+    # `GH_TOKEN` is not optional here in practice. `wasm/toolchain.sh` checks the
+    # bindist digest against the GitHub API before installing, and the anonymous
+    # allowance is per IP — a dozen legs plus three other workflows sharing runner
+    # addresses exhaust it and the API answers 403. That cost a red macOS leg.
     - name: Install the toolchain
       if: runner.os != 'Windows' && steps.toolchain.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: bash wasm/toolchain.sh
 
     # macOS 26 ships `jq` and `zstd` but not `xz`, and `setup.sh` reaches for all
@@ -72,9 +78,11 @@ runs:
           wasm/hadolint-wasi/dist-newstyle
         key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('wasm/toolchain.sh', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/**') }}
 
-    # `windows-latest` resolves to Windows Server 2025, which is the only Windows
-    # image with WSL2 — 2022 has WSL1 and GitHub closed the WSL2 request for it as
-    # won't-fix. The workflows pin `windows-2025` rather than rely on that.
+    # GHC's wasm backend has no Windows bindist, so the build runs inside WSL2
+    # here. WSL2 only exists on images newer than 2022 — `windows-2022` has WSL1
+    # and GitHub closed the WSL2 request for it as won't-fix — and the workflows
+    # use `windows-latest`, which only ever selects a newer image. If a future
+    # image regressed, this step fails; nothing guards it to no-op.
     #
     # There is no distro preinstalled, and installing one takes about 23 seconds.
     - name: Install a WSL distro
@@ -86,10 +94,17 @@ runs:
 
     # A fresh Ubuntu has curl, tar and xz, and is missing jq, make and unzip,
     # which `setup.sh` needs. `wsl` runs as root here, so this needs no sudo.
+    #
+    # `WSLENV` is how the token crosses into the distro: WSL does not inherit the
+    # Windows environment, and the digest check inside needs the same
+    # authenticated request the native path gets.
     - name: Install the toolchain in WSL
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
+        $env:WSLENV = "GH_TOKEN"
         wsl -d Ubuntu -e bash -c "apt-get update -qq && apt-get install -y -qq curl git tar jq make unzip xz-utils zstd"
         # D:\a\dlintr\dlintr -> /mnt/d/a/dlintr/dlintr, in PowerShell rather than
         # via `wslpath`, so a Windows path never has to survive `wsl.exe`'s

@@ -82,14 +82,21 @@ jobs:
           - 26
         os:
           - macos-latest
-          # `windows-2025`, not `windows-latest`. GHC's wasm backend has no
-          # Windows bindist, so the reactor is built inside WSL2 here — and only
-          # the 2025 image has WSL2. `windows-2022` has WSL1 and GitHub closed
-          # the request for WSL2 on it as won't-fix (`actions/runner-images`
-          # #10563, "not all Windows 2022 fleet support WSL 2"). `-latest`
-          # resolves to 2025 today; pinning means the day that changes is a
-          # deliberate edit rather than a mystery.
-          - windows-2025
+          # `windows-latest`, deliberately not a pinned `windows-2025`.
+          #
+          # GHC's wasm backend has no Windows bindist, so the reactor is built
+          # inside WSL2 here. WSL2 only exists on images newer than 2022:
+          # `windows-2022` has WSL1, and GitHub closed the request for WSL2 on it
+          # as won't-fix (`actions/runner-images` #10563, "not all Windows 2022
+          # fleet support WSL 2").
+          #
+          # That argues for `-latest` rather than against it. The risk belongs to
+          # *pinned older* images, and `-latest` never selects one — it tracks
+          # forward, so every image it can pick has WSL2, while pinning 2025 would
+          # freeze us on an image that will eventually be retired. If a future
+          # image ever regressed, the Windows leg fails loudly here; nothing
+          # guards the build to no-op when WSL is missing, on purpose.
+          - windows-latest
           - ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
