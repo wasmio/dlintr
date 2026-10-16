@@ -353,12 +353,12 @@ jobs:
             echo
             echo "| | |"
             echo "| --- | --- |"
-            echo "| hadolint | `$revision` |"
-            echo "| size | `$(du -h hadolint.wasm | cut -f1)` |"
-            echo "| sha256 | `$digest` |"
+            echo "| hadolint | $revision |"
+            echo "| size | $(du -h hadolint.wasm | cut -f1) |"
+            echo "| sha256 | $digest |"
             echo
-            echo "`release.yml` attaches this and `ghc_wasm_jsffi.js` to the release"
-            echo "changesets creates, which is where `scripts/hadolint-wasm.mjs` looks."
+            echo "release.yml attaches this and ghc_wasm_jsffi.js to the release"
+            echo "changesets creates, which is where scripts/hadolint-wasm.mjs looks."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A build that differs for identical inputs is an anomaly worth stopping
