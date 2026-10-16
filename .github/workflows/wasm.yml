@@ -136,7 +136,19 @@ jobs:
           path: |
             hadolint/dist-newstyle
             wasm/hadolint-wasi/dist-newstyle
-          key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('wasm/**', '.github/workflows/wasm.yml') }}
+          # Deliberately the same explicit list as `RECIPE_INPUTS` in
+          # `wasm/check-digest.mjs`, and the two must be kept in step.
+          #
+          # It was `wasm/**`, which included this canary's own manifest:
+          # recording a digest edited `wasm/digests.json`, that changed this
+          # key, that changed the incremental state of `dist-newstyle`, that
+          # produced different bytes — which the canary then reported as drift.
+          # The manifest was an input to the build it measures, so a recorded
+          # digest could never be stable.
+          #
+          # It also swept in `README.md`, `calls.mjs`, `check-digest.mjs` and
+          # `smoke.mjs`, none of which can change a compiled byte.
+          key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('.github/workflows/wasm.yml', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/cabal.project', 'wasm/hadolint-wasi/hadolint-wasi.cabal', 'wasm/hadolint-wasi/Main.hs') }}
 
       - name: Install System Dependencies
         if: steps.toolchain.outputs.cache-hit != 'true'
@@ -309,12 +321,12 @@ jobs:
           if-no-files-found: error
 
       # Deliberately after the reference is banked, and deliberately fatal. A
-      # compile error here still leaves the command artifact for \`ci\` to test —
-      # \`ci\` runs with \`if: always()\` for exactly that reason — while the error
+      # compile error here still leaves the command artifact for `ci` to test —
+      # `ci` runs with `if: always()` for exactly that reason — while the error
       # itself is a red run instead of a tolerated step.
       #
-      # It was \`continue-on-error\` for one run and that was a mistake: the step
-      # reported \`success\`, the artifact upload quietly found no files, and the
+      # It was `continue-on-error` for one run and that was a mistake: the step
+      # reported `success`, the artifact upload quietly found no files, and the
       # only trace was in the log. Do not put it back.
       - name: Build the reactor
         run: |
@@ -341,12 +353,12 @@ jobs:
             echo
             echo "| | |"
             echo "| --- | --- |"
-            echo "| hadolint | \`$revision\` |"
-            echo "| size | \`$(du -h hadolint.wasm | cut -f1)\` |"
-            echo "| sha256 | \`$digest\` |"
+            echo "| hadolint | `$revision` |"
+            echo "| size | `$(du -h hadolint.wasm | cut -f1)` |"
+            echo "| sha256 | `$digest` |"
             echo
-            echo "\`release.yml\` attaches this and \`ghc_wasm_jsffi.js\` to the release"
-            echo "changesets creates, which is where \`scripts/hadolint-wasm.mjs\` looks."
+            echo "`release.yml` attaches this and `ghc_wasm_jsffi.js` to the release"
+            echo "changesets creates, which is where `scripts/hadolint-wasm.mjs` looks."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A build that differs for identical inputs is an anomaly worth stopping

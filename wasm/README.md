@@ -41,6 +41,34 @@ Upstream also marks `exe:hadolint` as `buildable: False` on wasm32 and passes it
 commit and **must be rebased whenever `hadolint` moves**; `build.sh`
 fails loudly if it stops applying.
 
+## The digest manifest
+
+`wasm/digests.json` keys a digest on `<submodule revision>:<recipe hash>`. The
+recipe hash covers an **explicit list** — `.github/workflows/wasm.yml`,
+`wasm/build-reactor.sh`, `wasm/hadolint-wasi/cabal.project`, its `.cabal` and
+`Main.hs` — and the build cache in `wasm.yml` is keyed on the same list. Those
+two must be kept in step: the cache is part of what decides the bytes, so a cache
+key that moves when the recipe does not makes the canary report drift for a build
+that changed only because its cache did.
+
+Two traps, both learned by falling into them.
+
+**Compute the key after every other change in the commit.** It is correct when
+computed and stale on arrival, because any later edit to a recipe file moves it.
+Recorded once before two subsequent `wasm.yml` edits, it silently stopped
+matching, and the check took its _unrecorded_ path — which passed with a notice,
+so the step reported success and looked verified.
+
+**A recipe hash that refuses to move is a signal.** A batch of edits that applies
+four of six changes, skipping two because a script exited on an earlier failed
+anchor, is caught by the hash not changing when a recipe file did. That is the
+same class as the trap above: a step that looks done.
+
+`wasm/check-digest.mjs --record <sha256>` writes an entry; without `--record` it
+compares, and **fails on an unrecorded key** rather than passing. An unrecorded
+key means the canary cannot fire, and a canary that cannot fire while reporting
+green is worse than none — it is a green signal meaning "did not run".
+
 ## Bootstrapping
 
 A fresh checkout has no `hadolint.wasm` and no release to fetch it from, so the
