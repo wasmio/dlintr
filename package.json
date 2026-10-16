@@ -13,6 +13,7 @@
   },
   "exports": "./src/index.ts",
   "files": [
+    "ghc_wasm_jsffi.js",
     "hadolint.wasm",
     "lib",
     "!**/*.tsbuildinfo"
@@ -21,7 +22,6 @@
     "build": "run-p build:*",
     "build:r": "r -f cjs",
     "build:tsc": "tsc -p src",
-    "build:wasm": "node scripts/hadolint-wasm.mjs",
     "dev": "vitest",
     "docs:build": "vite build docs",
     "docs:dev": "vite docs",
@@ -29,23 +29,16 @@
     "lint:es": "eslint . --cache -f friendly --max-warnings 10",
     "lint:style": "stylelint . --cache",
     "lint:tsc": "tsc --noEmit && tsc -p docs --noEmit",
+    "lint:typecov": "type-coverage",
     "prepare": "simple-git-hooks",
     "prerelease": "pnpm build",
     "release": "changeset publish",
     "serve": "sirv dist -s",
-    "pretest": "node scripts/hadolint-wasm.mjs",
     "test": "vitest run --coverage",
     "typecov": "type-coverage",
     "version": "changeset version",
-    "postversion": "pnpm i --no-frozen-lockfile"
-  },
-  "peerDependencies": {
-    "@bjorn3/browser_wasi_shim": "^0.4.2"
-  },
-  "peerDependenciesMeta": {
-    "@bjorn3/browser_wasi_shim": {
-      "optional": true
-    }
+    "postversion": "pnpm i --no-frozen-lockfile",
+    "wasm:build": "bash wasm/build-reactor.sh"
   },
   "dependencies": {
     "tslib": "^2.4.0"
@@ -62,7 +55,6 @@
     "@1stg/simple-git-hooks": "^2.0.0",
     "@1stg/stylelint-config": "^6.2.0",
     "@1stg/tsconfig": "^4.0.0",
-    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@changesets/changelog-github": "^1.0.0",
     "@changesets/cli": "^3.0.0",
     "@commitlint/cli": "^21.2.3",
@@ -128,6 +120,6 @@
     "ignoreNonNullAssertion": true,
     "showRelativePath": true,
     "strict": true,
-    "update": true
+    "update": false
   }
 }

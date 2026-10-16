@@ -8,9 +8,37 @@ permissions:
   contents: read
 
 jobs:
+  # The WASI binary the suite runs against, built once and handed to every
+  # matrix job below. Producing it is the `WASM` workflow's job, so the sixteen
+  # test jobs share one toolchain and one build, and CI never has to fetch a
+  # binary from outside this repository.
+  wasm:
+    name: Build hadolint.wasm
+    # A called workflow cannot use more permissions than its caller grants, and
+    # requesting more than it is given fails the entire run at startup — before
+    # a single job exists to show why. These are scoped to this job so that the
+    # test matrix below keeps the workflow's default `contents: read`.
+    permissions:
+      contents: read
+      id-token: write # provenance signing
+      attestations: write
+    uses: ./.github/workflows/wasm.yml
+
   ci:
     name: Lint and Test with Node.js ${{ matrix.node }} on ${{ matrix.os }}
+    needs: wasm
+    # The `wasm` job builds the command artifact first and the reactor last, and
+    # only the reactor is allowed to fail the job. `always()` keeps the suite
+    # running against the artifact that was already uploaded, rather than a
+    # reactor compile error skipping every test. If the artifact genuinely is
+    # missing, the download below fails and says so.
+    if: always()
     strategy:
+      # `fail-fast: false` stood here while the WASM matrix was being
+      # stabilised: a single failing job was cancelling the other eleven and
+      # hiding Windows, macOS and the remaining Node versions. It came out again
+      # once all twelve were green, because the default is what is wanted in
+      # normal operation.
       matrix:
         node:
           - 20
@@ -25,6 +53,24 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Two artifacts into the package root: `hadolint.wasm` and its glue, which
+      # the runtime loads, and the command build the format test compares
+      # against. Both come from the same commit, which is the only thing that
+      # makes that comparison worth anything.
+      #
+      # Note for anyone reading these logs: `digest-mismatch: error` is this
+      # action echoing its own default input, not a failure. It has been mistaken
+      # for one twice.
+      - name: Download hadolint.wasm
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hadolint-wasm
+
+      - name: Download the command reference
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hadolint-cli
 
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -44,6 +90,10 @@ jobs:
       - name: Build, Lint and Test
         run: pnpm run-s build lint test
         env:
+          # This run has the command reference, so the format check must not
+          # quietly skip: a missing file is a broken pipeline, not an absent
+          # optional extra.
+          DLINTR_REQUIRE_CLI: '1'
           EFF_NO_LINK_RULES: true
           PARSER_NO_WATCH: true
 

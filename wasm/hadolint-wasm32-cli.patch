@@ -1,0 +1,33 @@
+diff --git a/hadolint.cabal b/hadolint.cabal
+index a5dd0b5..984099c 100644
+--- a/hadolint.cabal
++++ b/hadolint.cabal
+@@ -178,10 +178,6 @@ library
+   default-language:   GHC2021
+ 
+ executable hadolint
+-  if !arch(wasm32)
+-    buildable: True
+-  else
+-    buildable: False
+   main-is:            Main.hs
+   other-modules:      Paths_hadolint
+   autogen-modules:    Paths_hadolint
+@@ -201,8 +197,15 @@ executable hadolint
+   ghc-options:
+     -Wall -Wcompat -Wincomplete-record-updates
+     -Wincomplete-uni-patterns -Wredundant-constraints
+-    -optP-Wno-nonportable-include-path -flate-dmd-anal -threaded
+-    -rtsopts "-with-rtsopts=-N5 -A4m"
++    -optP-Wno-nonportable-include-path -flate-dmd-anal
++    -rtsopts
++
++  -- wasm32-wasi has no threaded RTS: -threaded cannot be linked there, and the
++  -- -N5 it implies would be rejected at startup. Keep the native defaults.
++  if arch(wasm32)
++    ghc-options: -single-threaded "-with-rtsopts=-A4m"
++  else
++    ghc-options: -threaded "-with-rtsopts=-N5 -A4m"
+ 
+   build-depends:
+       base                  >=4.20.1    && <5

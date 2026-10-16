@@ -5,14 +5,32 @@ export default {
   ignoreFiles: [
     '**/*.{cjs,cts,js,json,json5,jsonc,jsx,mjs,mts,ts,tsx}',
     '**/*.d.ts',
-    '*.log',
-    '*.patch',
-    '*.yaml',
-    '*.yml',
+    // These suffixes are never CSS, and the patterns are anchored so that they
+    // also cover nested files (`wasm/hadolint-wasm32-cli.patch`,
+    // `wasm/build.sh`); a bare `*.patch` only reached the repository root.
+    '**/*.log',
+    '**/*.patch',
+    '**/*.sh',
+    '**/*.yaml',
+    '**/*.yml',
+    // The wasm build recipe is Haskell and cabal, not CSS.
+    '**/*.cabal',
+    '**/*.hs',
+    '**/cabal.project',
     'coverage/**',
     'dist/**',
+    // cabal's build directory: it holds checked-out dependency sources, so it
+    // contains markdown and YAML the CSS parser would otherwise be handed.
+    '**/dist-newstyle/**',
     'LICENSE',
-    'hadolint.wasm',
+    // Patterns, not names. Naming artifacts individually has already trailed
+    // three renames on this branch — `hadolint.wasm`, its `.sha256`, and the
+    // command build — and each new name was parsed as CSS before anyone
+    // noticed. A glob closes the class.
+    '**/*.wasm',
+    '**/*.sha256',
     'lib/**',
+    // The pinned hadolint checkout ships its own website CSS.
+    'hadolint/**',
   ],
 }

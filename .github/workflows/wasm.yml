@@ -1,0 +1,367 @@
+name: WASM
+
+# Builds `hadolint.wasm` from the `hadolint` submodule.
+#
+# This is the only place the binary comes from. It is `workflow_call`-able so
+# that `ci.yml`, the preview publish and `release.yml` can each obtain the
+# artifact in their own run — so a fresh checkout, and a first ever CI run, need
+# no pre-existing release and no binary from any other project. The artifact is
+# built once here and downloaded by the matrix legs, which is why building it is
+# not part of `pnpm build`.
+#
+# The toolchain and the build are cached under a key derived from the submodule
+# commit and this recipe, so the expensive path runs when the inputs change and
+# not on every push.
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/wasm.yml
+      - .gitmodules
+      - hadolint
+      - wasm/**
+
+# A build only matters if it is the newest one. `github.workflow` is the name of
+# the *caller*, which keeps this from being two workflows that both need the
+# artifact on the same commit — CI and the preview publish, say — cancelling
+# each other's build and leaving one of them with nothing to download.
+concurrency:
+  group: wasm-${{ github.workflow }}-${{ github.ref }}
+  # Supersede on any branch that is not `main`. A feature branch gets pushed
+  # repeatedly, and every superseded run is a full toolchain install thrown
+  # away — the queue is a real cost. `main` never cancels, so a release build is
+  # never killed once it is under way.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build hadolint.wasm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance signing
+      attestations: write
+    env:
+      # `setup.sh` names the whole toolchain — GHC bindist, wasi-sdk, cabal,
+      # binaryen, wasmtime — in `autogen.json` of whichever ghc-wasm-meta
+      # revision it runs from, so a full commit hash pins all of it at once and
+      # makes that file immutable.
+      #
+      # `FLAVOUR=9.10` is load-bearing: the default is 9.14, and hadolint needs
+      # `ghc-experimental >=9.1003 && <9.1201`, which 9.14 cannot satisfy.
+      #
+      # Equally load-bearing: `setup.sh` must run *without* `SKIP_GHC`. The
+      # bindist ships unconfigured, and it is `setup.sh`'s own
+      # `./configure --target=wasm32-wasi` that turns it into a wasm compiler.
+      # Skip that step and you get a GHC which reports a wasm target while
+      # emitting x86-64 assembly, which the wasm assembler then rejects with
+      # "Wasm doesn't support data symbols in text sections" (`@progbits`).
+      GHC_WASM_META_REV: 60098a5076557e327b326a1a3ba3b5fb4fec1e49
+      GHC_WASM_BINDIST_TAG: 20260403T135157
+      GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
+      # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
+      # a floating one would make the digest published with it meaningless.
+      BINARYEN_URL: https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+      BINARYEN_DIR: binaryen-version_133
+      BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Submodule Revision
+        id: source
+        run: echo "revision=$(git -C hadolint rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Restores the GHC wasm toolchain, the Haskell dependency build and the
+      # artifact itself.
+      #
+      # Two caches, deliberately split. The toolchain is about a gigabyte and
+      # depends only on the pinned revision, bindist and optimiser — *not* on
+      # anything under `wasm/`. Keying it on the recipe, as this once did, meant
+      # every typo fix in a build script paid for a full GHC install again, which
+      # is the difference between a two-minute compile-error iteration and a
+      # twenty-minute one.
+      - name: Cache the toolchain
+        id: toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.ghc-wasm
+            ~/.ghcup
+            ~/.cabal
+          key: wasm-toolchain-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-${{ env.GHC_WASM_BINDIST_TAG }}-${{ env.BINARYEN_SHA256 }}
+
+      # Only `dist-newstyle`, and a hit does **not** skip the build steps below.
+      # Seeding the incremental state is the whole point; skipping the compile
+      # would hide exactly the compile errors this job exists to surface, and a
+      # cache saved from a failed run would then keep hiding them.
+      #
+      # That is the third way this pipeline has been able to report success for
+      # something that did not happen, after `continue-on-error` swallowing a
+      # step's conclusion and `if-no-files-found: ignore` swallowing a missing
+      # artifact. All three produce a green run describing a build that never
+      # took place. Ask the same question of anything added here: what would it
+      # hide?
+      - name: Restore the build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            hadolint/dist-newstyle
+            wasm/hadolint-wasi/dist-newstyle
+          # An explicit list, not `wasm/**`, because only these five files can
+          # change a compiled byte.
+          #
+          # It was `wasm/**`, which swept in the manifest of the digest canary
+          # that has since been retired: recording an observation edited that
+          # manifest, which changed this key, which changed the incremental state
+          # of `dist-newstyle`, which produced different bytes — which the canary
+          # then reported as drift. The manifest was an input to the build it
+          # measured, so a recorded digest could never be stable.
+          #
+          # It also swept in `README.md`, `calls.mjs` and `smoke.mjs`, none of
+          # which can change a compiled byte.
+          key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('.github/workflows/wasm.yml', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/cabal.project', 'wasm/hadolint-wasi/hadolint-wasi.cabal', 'wasm/hadolint-wasi/Main.hs') }}
+
+      - name: Install System Dependencies
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils-gold \
+            curl \
+            g++ \
+            gcc \
+            git \
+            gzip \
+            jq \
+            libc-dev \
+            libffi-dev \
+            libgmp-dev \
+            libncurses-dev \
+            make \
+            musl \
+            musl-dev \
+            musl-tools \
+            perl \
+            tar \
+            xz-utils \
+            zlib1g \
+            zlib1g-dev
+
+      # Deliberately unguarded, even on a toolchain cache hit. The cached
+      # directories are `~/.ghc-wasm`, `~/.ghcup` and `~/.cabal`; binaryen is
+      # extracted into the *workspace*, so a hit would skip the download, leave
+      # `$PWD/${BINARYEN_DIR}` absent, and let the build's `export PATH` fall
+      # through to the binaryen `setup.sh` ships inside `~/.ghc-wasm` — version
+      # 129 at this revision, not 133.
+      #
+      # That is the invariant: a step whose output lives outside the cached
+      # paths must never be skipped on a hit. Skipping it here did not fail
+      # loudly; it failed at the version assertion much later, and would have
+      # been invisible without it.
+      - name: Install binaryen
+        run: |
+          curl -fsSL -o binaryen.tar.gz "$BINARYEN_URL"
+          echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
+          tar xzf binaryen.tar.gz
+          echo "$PWD/$BINARYEN_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Install GHC wasm toolchain
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        env:
+          # `gh api` below needs it; it is not picked up implicitly.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A full clone: the pin is a specific revision.
+          git clone https://gitlab.haskell.org/haskell-wasm/ghc-wasm-meta.git
+          git -C ghc-wasm-meta checkout "$GHC_WASM_META_REV"
+
+          # `setup.sh` fetches the bindist into a `mktemp -d` that it deletes on
+          # exit, so the tarball cannot be hashed afterwards. Check the release
+          # asset's own digest before installing instead — GitHub computes it at
+          # upload, so a replaced asset fails here rather than quietly becoming
+          # the compiler we build with.
+          published="$(gh api "repos/haskell-wasm/ghc-wasm-bindists/releases/tags/$GHC_WASM_BINDIST_TAG" \
+            --jq '.assets[] | select(.name == "wasm32-wasi-ghc-9.10.tar.xz") | .digest')"
+          if [ "sha256:$GHC_WASM_BINDIST_SHA256" != "$published" ]; then
+            echo "::error::bindist digest is '$published', expected 'sha256:$GHC_WASM_BINDIST_SHA256'"
+            exit 1
+          fi
+
+          # No SKIP_GHC: this is the `./configure --target=wasm32-wasi` that turns
+          # the unconfigured bindist into a wasm compiler. See the env block.
+          FLAVOUR=9.10 ghc-wasm-meta/setup.sh
+
+      # Deliberately before the real build, and the most informative step in this
+      # workflow: if the published toolchain cannot compile a one-line program,
+      # then it cannot compile any Haskell and the fault is not our cabal
+      # invocation. It also prints the compiler, its C toolchain and its boot
+      # library versions, because `base`/`text` decide whether hadolint's bounds
+      # are even satisfiable.
+      - name: Probe Toolchain
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        run: |
+          source ~/.ghc-wasm/env
+
+          echo "::group::which"
+          for tool in ghc wasm32-wasi-ghc wasm32-wasi-ghc-pkg wasm32-wasi-cabal clang wasm32-wasi-clang wasmtime; do
+            printf '%-22s %s\n' "$tool" "$(command -v "$tool" || echo '(absent)')"
+          done
+          echo "::endgroup::"
+
+          libdir="$(wasm32-wasi-ghc --print-libdir)"
+          echo "wasm32-wasi-ghc: $(wasm32-wasi-ghc --version)"
+          echo "libdir:          $libdir"
+
+          # `settings` is one long JSON-ish line, so split it on commas before
+          # grepping. Anchoring on `^` matched nothing at all the first time.
+          echo "::group::settings (the C toolchain it will actually drive)"
+          tr ',' '\n' < "$libdir/settings" \
+            | grep -E '"C compiler command"|"C compiler flags"|"Cxx compiler flags"|"ld command"|"ar command"|"target platform"' \
+            || true
+          echo "::endgroup::"
+
+          echo "::group::boot libraries"
+          wasm32-wasi-ghc-pkg list --simple-output 2> /dev/null \
+            | tr ' ' '\n' | grep -E '^(base|text|bytestring|containers)-' || true
+          echo "::endgroup::"
+
+          # Two hello worlds, deliberately. "the compiler alone works, cabal does
+          # not" and "neither works" point at completely different culprits, and
+          # one probe cannot tell them apart. The assembler error we are chasing
+          # is also suspiciously PIC-shaped, so if only the cabal one fails, the
+          # next thing to read is what flags cabal is adding.
+          run_wasm() {
+            if command -v wasmtime > /dev/null; then
+              wasmtime "$1"
+            else
+              echo "wasmtime is not on PATH, not running it"
+            fi
+          }
+
+          echo "::group::hello world, direct with wasm32-wasi-ghc"
+          printf 'main = putStrLn "hi"\n' > "$RUNNER_TEMP/hello.hs"
+          wasm32-wasi-ghc "$RUNNER_TEMP/hello.hs" -o "$RUNNER_TEMP/hello.wasm"
+          ls -l "$RUNNER_TEMP/hello.wasm"
+          run_wasm "$RUNNER_TEMP/hello.wasm"
+          echo "::endgroup::"
+
+          echo "::group::hello world, through wasm32-wasi-cabal"
+          probe="$RUNNER_TEMP/probe-hello"
+          mkdir -p "$probe"
+          printf 'main = putStrLn "hi"\n' > "$probe/Main.hs"
+          printf 'cabal-version: 2.4\nname: probe-hello\nversion: 0\nbuild-type: Simple\n\nexecutable probe-hello\n  main-is: Main.hs\n  build-depends: base\n  default-language: GHC2021\n' \
+            > "$probe/probe-hello.cabal"
+          (cd "$probe" && wasm32-wasi-cabal build exe:probe-hello)
+          probe_bin="$(cd "$probe" && wasm32-wasi-cabal list-bin exe:probe-hello)"
+          ls -l "$probe_bin"
+          run_wasm "$probe_bin"
+          echo "::endgroup::"
+
+      - name: Build hadolint.wasm
+        run: |
+          source ~/.ghc-wasm/env
+
+          # setup.sh installs a binaryen of its own from the same autogen.json;
+          # put the pinned one first so the artifact's bytes stay reproducible.
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          wasm-opt --version
+          case "$(wasm-opt --version)" in
+            *"version 133"*) ;;
+            *)
+              echo "::error::expected the pinned wasm-opt 133, got: $(wasm-opt --version)"
+              exit 1
+              ;;
+          esac
+
+          bash wasm/build.sh hadolint-cli.wasm
+
+      # A module that links but cannot start is the failure worth catching, so
+      # this really runs it. See wasm/smoke.mjs.
+      - name: Smoke Test
+        run: node wasm/smoke.mjs hadolint-cli.wasm
+
+      # The command build no longer ships — the reactor does — but it is kept
+      # and published as its own artifact, because it is the reference the
+      # format-equality test compares against. That test is only worth having
+      # when both sides come from the same commit.
+      - name: Upload the command reference
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hadolint-cli
+          path: hadolint-cli.wasm
+          if-no-files-found: error
+
+      # Deliberately after the reference is banked, and deliberately fatal. A
+      # compile error here still leaves the command artifact for `ci` to test —
+      # `ci` runs with `if: always()` for exactly that reason — while the error
+      # itself is a red run instead of a tolerated step.
+      #
+      # It was `continue-on-error` for one run and that was a mistake: the step
+      # reported `success`, the artifact upload quietly found no files, and the
+      # only trace was in the log. Do not put it back.
+      - name: Build the reactor
+        run: |
+          source ~/.ghc-wasm/env
+          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+          bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js
+
+      - name: Checksum
+        id: wasm
+        run: |
+          digest="$(sha256sum hadolint.wasm | tee hadolint.wasm.sha256 | cut -d' ' -f1)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          # Echoed, not just summarized: the build is not byte-reproducible, so
+          # every run ships a different binary. When one of them crashes a
+          # platform, the digest is the only thing that ties the crash to an
+          # artifact — and a step summary is not greppable after the fact, which
+          # is exactly how a crashing binary became unidentifiable once already.
+          echo "hadolint.wasm sha256: $digest"
+          # The submodule clone here carries no tags, so `git describe` fails;
+          # the cabal file is the authoritative version anyway.
+          revision="v$(sed -n "s/^version: *//p" hadolint/hadolint.cabal | head -1)"
+          {
+            echo "### hadolint.wasm"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| hadolint | $revision |"
+            echo "| size | $(du -h hadolint.wasm | cut -f1) |"
+            echo "| sha256 | $digest |"
+            echo
+            echo "CI and the preview publish download these as the hadolint-wasm"
+            echo "artifact, and release.yml packs them into the npm tarball. Nothing"
+            echo "is attached to the release."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Fork pull requests get a read-only token, so signing is not available.
+      - name: Attest Build Provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: hadolint.wasm
+
+      # The two files the package ships. The glue is not optional: the exports
+      # are unreachable without it.
+      - name: Upload WASM Artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hadolint-wasm
+          path: |
+            hadolint.wasm
+            ghc_wasm_jsffi.js
+            hadolint.wasm.sha256
+          if-no-files-found: error

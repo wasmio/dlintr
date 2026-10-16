@@ -1,0 +1,31 @@
+-- Builds hadolint's JS-facing reactor alongside the submodule it depends on.
+--
+-- Run from this directory: `wasm32-wasi-cabal build exe:hadolint-wasi`.
+packages:
+  ../../hadolint
+  .
+
+allow-newer:
+  time
+
+optional-packages:
+  ../../hadolint/vendored/**/*.cabal
+
+-- Mirrors the `if arch(wasm32)` block of ../../hadolint/cabal.project. Repeated
+-- rather than `import:`-ed on purpose: the relative-path semantics of a
+-- `packages:` stanza inside an imported project file are exactly the kind of
+-- thing this build cannot afford to get subtly wrong, and both forks are pinned
+-- to a tag, so there is nothing here to drift.
+if arch(wasm32)
+  shared: True
+
+  source-repository-package
+    type: git
+    location: https://github.com/haskell-wasm/network
+    tag: ab92e48e9fdf3abe214f85fdbe5301c1280e14e9
+
+  source-repository-package
+    type: git
+    location: https://github.com/m-ildefons/haskell-xml
+    tag: 755c749efe70bcaefa7d182dc62f70cb79f45a32
+    subdir: xml-conduit

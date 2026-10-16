@@ -1,12 +1,12 @@
-import { fstatSync } from 'node:fs'
-
-import { getVersion, lint, run } from 'dlintr'
+import { getVersion, lint } from 'dlintr'
 import type { Severity } from 'dlintr'
 
 /** A pinned base image, which hadolint has nothing to say about. */
 const CLEAN = 'FROM alpine:3.20\n'
 /** An unpinned base image, which trips DL3007. */
 const UNPINNED = 'FROM ubuntu:latest\n'
+/** A registry, which only DL3026 has an opinion about. */
+const REGISTRY = 'FROM myregistry.example.com/team/image:1.0\n'
 
 test('reports the bundled hadolint version', async () => {
   await expect(getVersion()).resolves.toMatch(
@@ -50,54 +50,37 @@ test('re-levels an individual rule with `severityOverrides`', async () => {
   expect(results[0]).toMatchObject({ code: 'DL3007', level: 'error' })
 })
 
-// hadolint answers a rejected option with exit 1 and an empty stdout, which must
-// not be mistaken for "no findings".
-test('surfaces a rejected option instead of reporting no findings', async () => {
-  await expect(
-    lint(UNPINNED, { severityOverrides: { DL3007: 'bogus' as Severity } }),
-  ).rejects.toThrow(/Invalid option/)
-})
-
-// `lint` returns findings and drops the exit code, so a CI gate is either
-// derived from `level`, or taken from `run` together with `--failure-threshold`.
-test('exposes the exit code for gating', async () => {
-  const { exitCode } = await run(
-    ['--format', 'json', '--failure-threshold', 'error', '-'],
-    { stdin: UNPINNED },
-  )
-
-  expect(exitCode).toBe(0)
-})
-
 test('reads configuration from the environment', async () => {
   await expect(
     lint(UNPINNED, { env: { HADOLINT_IGNORE: 'DL3007' } }),
   ).resolves.toEqual([])
 })
 
-test('exposes the raw CLI through `run`', async () => {
-  const { exitCode, stdout, stderr } = await run(['--no-color', '-'], {
-    stdin: UNPINNED,
-  })
+// This is what proves the reactor can see the environment at all, and so that
+// `env` was not lost along with the CLI's argument surface. The reactor imports
+// `environ_get`, the host supplies it, and this turns that from a reading of the
+// import table into a fact.
+//
+// DL3026 only fires when trusted registries are configured *and* do not match:
+// with none configured, `Set.null allowed` short-circuits the check.
+test('DL3026 follows HADOLINT_TRUSTED_REGISTRIES, and reverts without it', async () => {
+  const withoutEnv = await lint(REGISTRY)
+  expect(withoutEnv.map(({ code }) => code)).not.toContain('DL3026')
 
-  expect(exitCode).toBe(1)
-  expect(stdout).toContain('DL3007')
-  expect(stderr).toBe('')
+  const withEnv = await lint(REGISTRY, {
+    env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' },
+  })
+  expect(withEnv.map(({ code }) => code)).toContain('DL3026')
+
+  // And back again, so the environment is per-instance rather than leaking from
+  // whichever reactor the previous call happened to cache.
+  const reverted = await lint(REGISTRY)
+  expect(reverted.map(({ code }) => code)).not.toContain('DL3026')
 })
 
-test('runs the same single-use module more than once', async () => {
+test('the module is instantiated once and called repeatedly', async () => {
   for (let index = 0; index < 3; index++) {
     await expect(lint(CLEAN)).resolves.toEqual([])
-  }
-})
-
-// uvwasi closes the descriptors handed to it, so `node:wasi` must never be given
-// one of the host's own — that works exactly once and then fails with EBADF.
-test('leaves the host stdio descriptors open', async () => {
-  await lint(CLEAN)
-
-  for (const fd of [0, 1, 2]) {
-    expect(() => fstatSync(fd)).not.toThrow()
   }
 })
 
@@ -109,4 +92,12 @@ test('can lint several Dockerfiles concurrently', async () => {
   ])
 
   expect(results.map(({ length }) => length)).toEqual([1, 0, 1])
+})
+
+test('an override for a rule that did not fire changes nothing', async () => {
+  const results = await lint(CLEAN, {
+    severityOverrides: { DL3007: 'error' as Severity },
+  })
+
+  expect(results).toEqual([])
 })

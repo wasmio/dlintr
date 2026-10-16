@@ -2,7 +2,11 @@
 .vercel
 coverage
 dist
+**/dist-newstyle
 lib
 /auto-imports.d.ts
 /pnpm-lock.yaml
-/hadolint.wasm
+*.wasm
+*.sha256
+/ghc_wasm_jsffi.js
+/hadolint

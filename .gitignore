@@ -3,7 +3,13 @@
 .vercel
 coverage
 dist
+# cabal's build directory, wherever a local `wasm/build*.sh` leaves one
+**/dist-newstyle
 lib
 node_modules
-# build artifact fetched by scripts/hadolint-wasm.mjs
+# build artifacts the WASM workflow produces; built there and locally, never
+# committed and no longer fetched from a release
 /hadolint.wasm
+/ghc_wasm_jsffi.js
+# the command build, kept only for the format-equality test
+/hadolint-cli.wasm
