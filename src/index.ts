@@ -12,6 +12,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { createDlinter } from './api.js'
+import { memoize } from './memoize.js'
 import { createReactor } from './reactor.js'
 import type { GhcWasmJsffi } from './reactor.js'
 
@@ -31,10 +32,8 @@ const packageRoot = (): string =>
  * The module and its glue, compiled once. Only the WASI environment differs
  * between calls, and that is cheap to re-instantiate.
  */
-let assets: Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> | undefined
-
-const loadAssets = (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
-  assets ??= (async () => {
+const loadAssets = memoize(
+  async (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
     const root = packageRoot()
     const [bytes, glue] = await Promise.all([
       readFile(path.join(root, 'hadolint.wasm')),
@@ -45,15 +44,8 @@ const loadAssets = (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
       }>,
     ])
     return [await WebAssembly.compile(bytes), glue.default] as const
-  })()
-
-  // A cached rejection would make one transient failure permanent.
-  assets.catch(() => {
-    assets = undefined
-  })
-
-  return assets
-}
+  },
+)
 
 const dlinter = createDlinter(async env => {
   const [module, glue] = await loadAssets()

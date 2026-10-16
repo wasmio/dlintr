@@ -71,15 +71,17 @@ export interface WasiHost {
 export const createWasiHost = (env: readonly string[]): WasiHost => {
   let memory: WebAssembly.Memory | undefined
 
-  /** A fresh view each call: memory can grow and detach the old buffer. */
-  const view = (): DataView => {
+  const requireMemory = (): WebAssembly.Memory => {
     if (!memory) {
       throw new Error('dlintr: WASI called before initialize()')
     }
-    return new DataView(memory.buffer)
+    return memory
   }
 
-  const bytes = (): Uint8Array => new Uint8Array(view().buffer)
+  /** A fresh view each call: memory can grow and detach the old buffer. */
+  const view = (): DataView => new DataView(requireMemory().buffer)
+
+  const bytes = (): Uint8Array => new Uint8Array(requireMemory().buffer)
 
   const encoder = new TextEncoder()
   const entries = env.map(entry => encoder.encode(`${entry}\0`))

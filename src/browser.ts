@@ -7,17 +7,16 @@
  * `package.json`.
  */
 import { createDlinter } from './api.js'
+import { memoize } from './memoize.js'
 import { createReactor } from './reactor.js'
 import type { GhcWasmJsffi } from './reactor.js'
 
 /**
- * The module and its glue, compiled once. Only the WASI environment differs
+ * The module and its glue, fetched once. Only the WASI environment differs
  * between calls, and that is cheap to re-instantiate.
  */
-let assets: Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> | undefined
-
-const loadAssets = (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
-  assets ??= (async () => {
+const loadAssets = memoize(
+  async (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
     const wasmUrl = new URL('../hadolint.wasm', import.meta.url)
     const glueUrl = new URL('../ghc_wasm_jsffi.js', import.meta.url)
 
@@ -36,15 +35,8 @@ const loadAssets = (): Promise<readonly [WebAssembly.Module, GhcWasmJsffi]> => {
       await WebAssembly.compile(await response.arrayBuffer()),
       glue.default,
     ] as const
-  })()
-
-  // A cached rejection would make one transient failure permanent.
-  assets.catch(() => {
-    assets = undefined
-  })
-
-  return assets
-}
+  },
+)
 
 const dlinter = createDlinter(async env => {
   const [module, glue] = await loadAssets()

@@ -121,8 +121,8 @@ jobs:
           path: |
             hadolint/dist-newstyle
             wasm/hadolint-wasi/dist-newstyle
-          # Deliberately the same explicit list as `RECIPE_INPUTS` in
-          # `wasm/check-digest.mjs`, and the two must be kept in step.
+          # An explicit list, not `wasm/**`, because only these five files can
+          # change a compiled byte.
           #
           # It was `wasm/**`, which included this canary's own manifest:
           # recording a digest edited `wasm/digests.json`, that changed this
@@ -131,8 +131,8 @@ jobs:
           # The manifest was an input to the build it measures, so a recorded
           # digest could never be stable.
           #
-          # It also swept in `README.md`, `calls.mjs`, `check-digest.mjs` and
-          # `smoke.mjs`, none of which can change a compiled byte.
+          # It also swept in `README.md`, `calls.mjs` and `smoke.mjs`, none of
+          # which can change a compiled byte.
           key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('.github/workflows/wasm.yml', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/cabal.project', 'wasm/hadolint-wasi/hadolint-wasi.cabal', 'wasm/hadolint-wasi/Main.hs') }}
 
       - name: Install System Dependencies

@@ -19,7 +19,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_dir="$root/hadolint"
 patch="$root/wasm/hadolint-wasm32-cli.patch"
-output="${1:-$root/hadolint.wasm}"
+output="${1:-$root/hadolint-cli.wasm}"
 
 if [ ! -f "$source_dir/hadolint.cabal" ]; then
   echo "wasm: hadolint is empty — run 'git submodule update --init'" >&2
@@ -65,11 +65,12 @@ fi
 bin="$(tail -n 1 /tmp/wasm-bin.txt)"
 
 # `-Oz` is the size profile and the reason this step exists at all. Against the
-# v2.15.1 source: GHC's raw output is 22.34 MiB, a Binaryen round-trip with no
-# passes already drops that to 14.38 MiB (GHC does not emit minimally encoded
-# wasm), and `-Oz --converge` reaches 7.78 MiB — 1.65 MiB once brotli'd. `-O3`
-# stops at 14.34 MiB and compresses worse, so size is the profile to pick: every
-# install downloads this file.
+# v2.15.1 source: GHC's raw output is about 22 MiB, a Binaryen round-trip with no
+# passes already drops that to about 14 MiB (GHC does not emit minimally encoded
+# wasm), and `-Oz --converge` lands at **8.71 MiB** — the size of the artifact
+# `wasm.yml` uploads, so CI logs it on every build. `-O3` stops around the same
+# place and compresses worse, so size is the profile to pick: every install
+# downloads this file.
 wasm-opt -Oz --converge -o "$output" "$bin"
 
 echo "wasm: wrote $output ($(du -h "$output" | cut -f1))"

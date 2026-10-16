@@ -53,21 +53,26 @@ what identical inputs have actually produced. Nothing compares against it and
 nothing fails on a mismatch, because that would fail on every run. An earlier
 version of this file was a gate; it was retired for exactly that reason.
 
-`wasm/check-digest.mjs <sha256>` reports whether a digest has been seen before
-and always exits 0; `--record` appends. The recipe key it computes covers an
-**explicit list** — `.github/workflows/wasm.yml`, `wasm/build-reactor.sh`, and
-the wrapper's `cabal.project`, `.cabal` and `Main.hs` — and the build cache in
-`wasm.yml` is keyed on the same list. **The two must stay in step**: a cache that
-moves when the recipe does not makes the history unreadable.
+The observations are grouped by recipe. Each entry names the hadolint version
+and lists every digest that recipe has produced — two, four and two across the
+three recorded recipes. That grouping _is_ the argument, and it reads without
+recomputing anything:
 
-`wasm/upstream-report.md` is the draft finding. Eight outputs from one source is
-evidence, and evidence is what an upstream report needs.
+```sh
+node -e 'const d=require("./wasm/digests.json");for(const[k,v]of Object.entries(d))if(k!=="_")console.log(k.split(":")[1],v.observed.length)'
+```
+
+`wasm/upstream-report.md` is the finding as filed —
+[`haskell-wasm/ghc-wasm-bindists#49`](https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49).
+Eight outputs from one source is evidence, and evidence is what an upstream
+report needs.
 
 ### Traps this cost, all the same shape
 
-Every one of these was a signal that looked like success and meant "did not
-run". Recorded together, because the pattern rather than the individual bug is
-what to watch for:
+The gate was retired, but these are kept: every one is a signal that looked like
+success and meant "did not run", and the pattern rather than the individual bug
+is what to watch for. `wasm.yml` and `wasm/build-reactor.sh` are where the
+machinery they refer to lived.
 
 1. **Compute the recipe key after every other change in the commit.** It is
    correct when computed and stale on arrival. Recorded once before two later
@@ -218,7 +223,7 @@ source ~/.ghc-wasm/env
 git submodule update --init
 pnpm wasm:build                  # `bash wasm/build-reactor.sh`; writes both files
 node wasm/calls.mjs              # what WASI imports it actually calls
-node wasm/smoke.mjs hadolint.wasm # only for the *command* build, see below
+node wasm/smoke.mjs hadolint-cli.wasm # only for the *command* build, see below
 ```
 
 `wasm:build` is named so that it is **not** part of `pnpm build`, and the
@@ -249,7 +254,17 @@ gh run download --repo wasmio/dlintr --name hadolint-wasm
 
 A published npm tarball carries both files as well (`npm pack dlintr`). To build
 one anyway, use WSL2 and check out inside the Linux filesystem rather than under
-`/mnt/c`.
+`/mnt/c` — and **move the toolchain's workdir off the tmpfs first**. WSL2 mounts
+`/tmp` as a ~4 GiB tmpfs, and `setup.sh` stages its downloads _and_ the extracted
+GHC tree there through `mktemp -d`, so the install dies partway with
+`tar: … Cannot write: No space left on device` — which reads like a disk limit
+and is not one. Measured on a GitHub Windows runner: it fails at ~1.5 GiB, and
+with `TMPDIR` on the ext4 filesystem the same install completes at 5.8 GiB and
+compiles and runs hello-world.
+
+```sh
+mkdir -p ~/tmp && TMPDIR=~/tmp FLAVOUR=9.10 ghc-wasm-meta/setup.sh
+```
 
 That asymmetry is exactly why CI builds this once and shares it as an artifact
 instead of each matrix leg building its own. The Windows legs cannot produce it,

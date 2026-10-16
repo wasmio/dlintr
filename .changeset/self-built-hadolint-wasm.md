@@ -16,14 +16,9 @@ another project's committed blob, and from hadolint v2.15.1 instead of a March
   `level` instead of an exit code.
 - `ignore` and `severityOverrides` are unchanged in behaviour — applied to the
   returned findings, which is all they ever needed. `env` is unchanged too, and
-  still reaches hadolint through WASI.
-- **`node:wasi` cannot host this module**, so an earlier draft of this release
-  took on `@bjorn3/browser_wasi_shim` to compensate. It does not: the WASI
-  surface hadolint actually calls is five functions, measured rather than
-  assumed (`node wasm/calls.mjs`), and `src/wasi.ts` implements them. The
-  package keeps **no runtime dependencies**, and the fifteen imports it never
-  calls throw by name if a future module reaches for them.
-- The module ships with `ghc_wasm_jsffi.js`, GHC's half of the JSFFI. The
-  exports are unreachable without it, so the npm tarball carries both.
-- It is smaller and more current: 7.9 MB against 12.4 MB, and seven rules the
-  old binary did not have — DL3062 through DL3068 — so expect new findings.
+  still reaches hadolint.
+- It is smaller and more current: **7.55 MiB against 12.45 MiB**, and built from
+  hadolint v2.15.1 rather than a March 2025 snapshot — its rule set now runs to
+  **DL3067**, so expect findings the old binary could not report.
+- If you copy the module out of the package, copy `ghc_wasm_jsffi.js` beside it:
+  the exports are unreachable without it, so the tarball carries both.

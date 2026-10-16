@@ -40,7 +40,9 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       HOME,
       ...Object.entries(env ?? {}).map(([key, value]) => `${key}=${value}`),
     ]
-    const key = pairs.join('\n')
+    // `JSON.stringify` rather than a join: exact even when a value contains the
+    // separator, which an environment variable may.
+    const key = JSON.stringify(pairs)
 
     let reactor = reactors.get(key)
     if (!reactor) {
@@ -67,9 +69,12 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       const ignored = new Set(options.ignore ?? [])
       return findings
         .filter(({ code }) => !ignored.has(code))
-        .map(({ code, ...rest }) => {
-          const level: Severity | undefined = options.severityOverrides?.[code]
-          return level ? { code, ...rest, level } : { code, ...rest }
+        .map(finding => {
+          const level: Severity | undefined =
+            options.severityOverrides?.[finding.code]
+          // Only re-level when there is an override, so the common case does
+          // not rebuild every finding: `level` keeps its position either way.
+          return level ? { ...finding, level } : finding
         })
     },
 

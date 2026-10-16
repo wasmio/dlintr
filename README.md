@@ -20,6 +20,8 @@ Dockerfile linter, validate inline bash, powered by [`hadolint`](https://github.
   - [Install](#install)
   - [API](#api)
   - [How it works](#how-it-works)
+    - [The WASI surface, and its residual risk](#the-wasi-surface-and-its-residual-risk)
+    - [The digest, and what it does not promise](#the-digest-and-what-it-does-not-promise)
 - [Sponsors](#sponsors)
 - [Backers](#backers)
 - [Changelog](#changelog)
@@ -40,8 +42,8 @@ yarn add dlintr
 npm i dlintr
 ```
 
-No runtime dependencies: the WASI surface hadolint needs is implemented in
-`src/wasi.ts`.
+The only runtime dependency is `tslib`. The WASI surface hadolint needs is
+implemented in `src/wasi.ts` rather than taken from a library.
 
 ### API
 
@@ -127,8 +129,9 @@ Two things follow, stated plainly:
 
 ### The digest, and what it does not promise
 
-Each release carries a `.sha256` for `hadolint.wasm`, and the build is attested.
-**The digest identifies a build; it does not guarantee one.**
+The build is attested and the npm tarball is content-addressed, so what you
+install is what was published. **A digest identifies a build; it does not
+guarantee one.**
 
 This module is **not reproducible**. Two from-scratch builds of the same source,
 with the same toolchain and no build cache, produce different bytes — eight
@@ -140,7 +143,9 @@ An earlier version of this repository used the digest as a drift gate, comparing
 each build against a recorded value and failing on a mismatch. It was retired,
 because it failed on every run: a gate that presupposes a property the build does
 not have is not a gate. `wasm/digests.json` is kept as history of what identical
-inputs have produced, and `wasm/upstream-report.md` is the draft finding.
+inputs have produced, and the measurements are written up in
+`wasm/upstream-report.md` and filed upstream as
+[haskell-wasm/ghc-wasm-bindists#49](https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49).
 
 ## Sponsors
 
@@ -165,8 +170,6 @@ Detailed changes for each release are documented in [CHANGELOG.md](./CHANGELOG.m
 [MIT][] © [JounQin][]@[1stG.me][]
 
 [1stg.me]: https://www.1stg.me
-[bjorn3]: https://github.com/bjorn3/browser_wasi_shim
 [hadolint]: https://github.com/hadolint/hadolint
 [jounqin]: https://GitHub.com/JounQin
 [mit]: http://opensource.org/licenses/MIT
-[node-wasi]: https://nodejs.org/api/wasi.html

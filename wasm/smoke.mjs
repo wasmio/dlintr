@@ -7,12 +7,12 @@
  * `getHomeDirectory` reaches for that does not exist. So we actually start it
  * and check what it says.
  *
- * Runs the module the same way `src/wasi-node.ts` does — a WASI preview1
- * command, `node:wasi`, `HOME` set. stdout/stderr go to temp files rather than
- * to the host's descriptors, because uvwasi closes the descriptors it is handed
- * when the instance is torn down.
+ * Runs the module the way `runCli` in `test/reactor.spec.ts` does — a WASI
+ * preview1 command under `node:wasi`, with `HOME` set. stdout/stderr go to temp
+ * files rather than to the host's descriptors, because uvwasi closes the
+ * descriptors it is handed when the instance is torn down.
  *
- * Usage: node wasm/smoke.mjs [path/to/hadolint.wasm]
+ * Usage: node wasm/smoke.mjs [path/to/hadolint-cli.wasm]
  */
 import {
   mkdtempSync,
