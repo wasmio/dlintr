@@ -19,10 +19,10 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "build": "run-p build:*",
+    "build": "run-p build:r build:tsc",
     "build:r": "r -f cjs",
     "build:tsc": "tsc -p src",
-    "build:wasm": "node scripts/build-wasm.mjs",
+    "build:wasm": "bash wasm/build-reactor.sh",
     "dev": "vitest",
     "docs:build": "vite build docs",
     "docs:dev": "vite docs",

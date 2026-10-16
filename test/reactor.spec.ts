@@ -22,13 +22,9 @@ const gluePath = path.join(root, 'ghc_wasm_jsffi.js')
  * The command build from the *same* commit — the only reference worth comparing
  * against. A difference would mean this package had forked the JSON format, and
  * a stored fixture would freeze whatever the format happened to be the day it
- * was recorded.
- *
- * Building it means linking hadolint's whole dependency tree a second way, so it
- * is built in exactly one CI job — `Command reference and format check` — and
- * that job sets `DLINTR_REQUIRE_CLI`. Everywhere else the file is absent and this
- * test skips, deliberately and in the log: the module is host-independent, so
- * eleven more builds of it would buy eleven more copies of one piece of evidence.
+ * was recorded. The `WASM` workflow uploads it as the `hadolint-cli` artifact;
+ * CI sets `DLINTR_REQUIRE_CLI`, so a missing file fails there instead of quietly
+ * skipping the one real check on the format.
  */
 const cliWasm = path.join(root, 'hadolint-cli.wasm')
 

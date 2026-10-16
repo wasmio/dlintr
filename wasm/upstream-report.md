@@ -3,12 +3,8 @@
 **Filed** as <https://github.com/haskell-wasm/ghc-wasm-bindists/issues/49>. It
 went there rather than to `gitlab.haskell.org` because that instance flags newly
 registered accounts as _external_, and an external user cannot create issues
-anywhere on it. The text below is what was filed.
-
-Note for anyone reproducing it now: the build was driven by
-`.github/workflows/wasm.yml` at the time, and that workflow has since been
-replaced by `.github/actions/wasm-toolchain` and `wasm/toolchain.sh`. The recipe
-is unchanged; only the file holding it moved.
+anywhere on it. The text below is what was filed, and `.github/workflows/wasm.yml`
+is still the workflow it refers to.
 
 ---
 
