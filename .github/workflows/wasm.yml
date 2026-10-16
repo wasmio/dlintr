@@ -12,17 +12,15 @@ name: WASM
 # The toolchain and the build are cached under a key derived from the submodule
 # commit and this recipe, so the expensive path runs when the inputs change and
 # not on every push.
+#
+# It has no trigger of its own: it only ever runs to serve a caller, because the
+# artifact belongs to the run that downloads it. A standalone push build could
+# only upload an artifact nothing would fetch, and pay a toolchain install for
+# the privilege. `workflow_dispatch` stays as the manual escape hatch for
+# exercising a build on its own.
 on:
   workflow_call: {}
   workflow_dispatch: {}
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/wasm.yml
-      - .gitmodules
-      - hadolint
-      - wasm/**
 
 # A build only matters if it is the newest one. `github.workflow` is the name of
 # the *caller*, which keeps this from being two workflows that both need the
