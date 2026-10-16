@@ -2,5 +2,9 @@
   "2eece55955ced00200be9729e9728cb7dacca505:e27b0a3ef3aef85a": {
     "sha256": "ffd4f05799be9536c5fea0b65f052aeefc026fd85b2ef201a1fa8e986f648b1a",
     "hadolint": "v2.15.1"
+  },
+  "2eece55955ced00200be9729e9728cb7dacca505:4a24d8cc74e487ca": {
+    "sha256": "445695d3b9e40d2bfef461f4554646fd99654f0c7eccd953ea2d174316c22c9b",
+    "hadolint": "v2.15.1"
   }
 }
