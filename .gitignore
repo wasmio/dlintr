@@ -11,5 +11,3 @@ node_modules
 # committed and no longer fetched from a release
 /hadolint.wasm
 /ghc_wasm_jsffi.js
-# the command build, kept only for the format-equality test
-/hadolint-cli.wasm

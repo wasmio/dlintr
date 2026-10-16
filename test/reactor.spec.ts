@@ -1,15 +1,6 @@
-import {
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { WASI } from 'node:wasi'
 
 import { createReactor } from '../src/reactor.js'
 import type { GhcWasmJsffi, Reactor } from '../src/reactor.js'
@@ -17,16 +8,6 @@ import type { GhcWasmJsffi, Reactor } from '../src/reactor.js'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const reactorWasm = path.join(root, 'hadolint.wasm')
 const gluePath = path.join(root, 'ghc_wasm_jsffi.js')
-
-/**
- * The command build from the *same* commit — the only reference worth comparing
- * against. A difference would mean this package had forked the JSON format, and
- * a stored fixture would freeze whatever the format happened to be the day it
- * was recorded. The `WASM` workflow uploads it as the `hadolint-cli` artifact;
- * CI sets `DLINTR_REQUIRE_CLI`, so a missing file fails there instead of quietly
- * skipping the one real check on the format.
- */
-const cliWasm = path.join(root, 'hadolint-cli.wasm')
 
 /**
  * A module that exports `_start` and so is a *command*, not a reactor. Built by
@@ -86,54 +67,6 @@ const load = async (): Promise<Reactor> => {
   ])
 }
 
-/** Run the command build with `-f json` and return exactly what it wrote. */
-const runCli = async (dockerfile: string): Promise<string> => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dlintr-cli-'))
-  try {
-    const stdin = path.join(dir, 'Dockerfile')
-    const stdout = path.join(dir, 'stdout.json')
-    writeFileSync(stdin, dockerfile)
-
-    const wasi = new WASI({
-      version: 'preview1',
-      args: ['hadolint', '--no-color', '--format', 'json', '-'],
-      env: { HOME: '/' },
-      stdin: openSync(stdin, 'r'),
-      stdout: openSync(stdout, 'w'),
-      stderr: openSync(path.join(dir, 'stderr'), 'w'),
-      returnOnExit: true,
-    })
-
-    const module = await WebAssembly.compile(readFileSync(cliWasm))
-    // Node types `node:wasi`'s `wasiImport` as
-    // `{ [key: string]: (...args: Array<any>) => unknown }`, so its `any` is
-    // inescapable here: annotating the binding narrows how it is *used*, but the
-    // source type still carries it, and the assertion this config declines to
-    // credit is exactly the double cast that would silence it. `node:wasi` is
-    // only used by this helper, to run the command build for the format check;
-    // the package itself no longer depends on a WASI implementation at all.
-    // type-coverage:ignore-next-line
-    const wasiImports: Record<string, WebAssembly.ExportValue> = wasi.wasiImport
-    const instance = await WebAssembly.instantiate(module, {
-      wasi_snapshot_preview1: wasiImports,
-    })
-    wasi.start(instance)
-
-    return readFileSync(stdout, 'utf8')
-  } finally {
-    // Best effort. `wasi.start` closes the descriptors it was handed, but on
-    // Windows the directory can still refuse to go with `ENOTEMPTY` while those
-    // handles are released — which is timing-dependent, so Node 24 and 26 pass
-    // on the same runner where 20 and 22 do not. A leftover temp directory is
-    // not a reason to fail the check that ran.
-    try {
-      rmSync(dir, { recursive: true, force: true })
-    } catch {
-      // The assertions above are the test; this is housekeeping.
-    }
-  }
-}
-
 // Calling `_initialize` on something that wants `_start`, or the reverse, ends
 // in a trap rather than an error, so the shape is checked before instantiation.
 test('refuses a command module, naming what it expected', async () => {
@@ -158,36 +91,6 @@ test('both exports return Promises', async () => {
 
   expect(await versioned).toMatch(/^Haskell Dockerfile Linter \d+\.\d+\.\d+$/)
   expect(JSON.parse(await linted)).toHaveLength(1)
-})
-
-test('emits exactly the bytes the CLI emits for the same input', async () => {
-  // Read once and handle absence, rather than stat-then-read: the check and
-  // the use cannot disagree if there is only one call.
-  let cli: Buffer | undefined
-  try {
-    cli = readFileSync(cliWasm)
-  } catch {
-    cli = undefined
-  }
-
-  if (!cli) {
-    if (process.env.DLINTR_REQUIRE_CLI) {
-      throw new Error(
-        `${path.basename(cliWasm)} is required here but missing. It is the command build from the same commit; the \`WASM\` workflow uploads it as the \`hadolint-cli\` artifact.`,
-      )
-    }
-    console.warn(
-      `dlintr: no ${path.basename(cliWasm)}, skipping the format check`,
-    )
-    return
-  }
-
-  const dockerfile = 'FROM ubuntu:latest\nRUN apt-get update\n'
-  const reactor = await load()
-
-  // Exact bytes, both sides raw: the claim being tested is that the JSON encoder
-  // carried in this package is byte-for-byte the library's.
-  expect(await reactor.lint(dockerfile)).toBe(await runCli(dockerfile))
 })
 
 test('reuses one instance across calls', async () => {

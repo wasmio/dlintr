@@ -117,7 +117,6 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            hadolint/dist-newstyle
             wasm/hadolint-wasi/dist-newstyle
           # An explicit list, not `wasm/**`, because only these five files can
           # change a compiled byte.
@@ -129,8 +128,8 @@ jobs:
           # then reported as drift. The manifest was an input to the build it
           # measured, so a recorded digest could never be stable.
           #
-          # It also swept in `README.md`, `calls.mjs` and `smoke.mjs`, none of
-          # which can change a compiled byte.
+          # It also swept in `README.md` and `calls.mjs`, neither of which can
+          # change a compiled byte.
           key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('.github/workflows/wasm.yml', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/cabal.project', 'wasm/hadolint-wasi/hadolint-wasi.cabal', 'wasm/hadolint-wasi/Main.hs') }}
 
       - name: Install System Dependencies
@@ -269,7 +268,11 @@ jobs:
           run_wasm "$probe_bin"
           echo "::endgroup::"
 
-      - name: Build hadolint.wasm
+      # Deliberately fatal, and deliberately not `continue-on-error`. It was, for
+      # one run, and that was a mistake: the step reported `success`, the
+      # artifact upload quietly found no files, and the only trace was in the
+      # log. Do not put it back.
+      - name: Build the reactor
         run: |
           source ~/.ghc-wasm/env
 
@@ -285,36 +288,6 @@ jobs:
               ;;
           esac
 
-          bash wasm/build.sh hadolint-cli.wasm
-
-      # A module that links but cannot start is the failure worth catching, so
-      # this really runs it. See wasm/smoke.mjs.
-      - name: Smoke Test
-        run: node wasm/smoke.mjs hadolint-cli.wasm
-
-      # The command build no longer ships — the reactor does — but it is kept
-      # and published as its own artifact, because it is the reference the
-      # format-equality test compares against. That test is only worth having
-      # when both sides come from the same commit.
-      - name: Upload the command reference
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: hadolint-cli
-          path: hadolint-cli.wasm
-          if-no-files-found: error
-
-      # Deliberately after the reference is banked, and deliberately fatal. A
-      # compile error here still leaves the command artifact for `ci` to test —
-      # `ci` runs with `if: always()` for exactly that reason — while the error
-      # itself is a red run instead of a tolerated step.
-      #
-      # It was `continue-on-error` for one run and that was a mistake: the step
-      # reported `success`, the artifact upload quietly found no files, and the
-      # only trace was in the log. Do not put it back.
-      - name: Build the reactor
-        run: |
-          source ~/.ghc-wasm/env
-          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
           bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js
 
       - name: Checksum

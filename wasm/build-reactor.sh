@@ -4,17 +4,17 @@
 # from the local `hadolint-wasi` package, which depends on the `hadolint`
 # submodule.
 #
-# This is the counterpart to `wasm/build.sh`, which builds the WASI /command/.
-# Both exist on purpose: the command is the pipeline's known-good smoke test,
-# and the reactor is what the runtime will actually call. The command path goes
-# away once the reactor is verified.
+# This is the only build file here. It used to have a counterpart,
+# `wasm/build.sh`, which built the WASI /command/ from `exe:hadolint` purely to
+# be the reference for a format-equality test; both went when the test did. See
+# `wasm/README.md`.
 #
 # Produces two files:
 #   hadolint.wasm     the reactor module
 #   ghc_wasm_jsffi.js GHC's JS half of the JSFFI, without which the exports
 #                     cannot be called at all
 #
-# CI builds this on every run, and the byte-equality test exercises the result.
+# CI builds this on every run, and the test suite exercises the result.
 #
 # Usage: wasm/build-reactor.sh [output.wasm] [ghc_wasm_jsffi.js]
 set -euo pipefail
