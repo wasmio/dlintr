@@ -188,15 +188,19 @@ git ls-files -s hadolint # expect a 160000 entry
 
 ## Building locally
 
-`build.sh` and `build-reactor.sh` need the GHC wasm toolchain on `PATH` (which
-brings `wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
-authority on versions; in short it pins
+`build-reactor.sh` needs the GHC wasm toolchain on `PATH` (which brings
+`wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
+authority on versions; in short it pins the toolchain
 
-|                          |                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `ghc-wasm-meta` revision | full commit hash; its `autogen.json` names the whole toolchain, so this pins it    |
-| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against the release asset's SHA-256 before install |
-| `wasm-opt`               | binaryen 133, checked against a SHA-256                                            |
+|                          |                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `ghc-wasm-meta` revision | full commit hash; its `autogen.json` names the whole toolchain, so this pins it     |
+| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against the release asset's SHA-256 before install  |
+| `wasm-opt`               | **not pinned** — newest binaryen release, checked against the checksum it publishes |
+
+The optimiser floats: the newest binaryen each run, checked against the checksum
+its release publishes. That catches a bad download, not a bad release — the
+version is logged on every build so a size change can still be traced.
 
 **`setup.sh` must run without `SKIP_GHC`, and with `FLAVOUR=9.10`.**
 
