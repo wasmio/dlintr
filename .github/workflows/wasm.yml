@@ -276,8 +276,17 @@ jobs:
         run: |
           source ~/.ghc-wasm/env
 
-          # setup.sh installs a binaryen of its own from the same autogen.json;
-          # put the pinned one first so the artifact's bytes stay reproducible.
+          # `setup.sh` installs a binaryen of its own — 129 at the pinned
+          # revision — so after the toolchain install there are two `wasm-opt`s
+          # on the box and PATH decides which writes the artifact. The one above
+          # is 133, fetched from a pinned URL and checked against its SHA-256,
+          # and this assertion is what proves *that* binary ran rather than the
+          # 129 fallback, which would silently change the artifact's bytes and
+          # its size.
+          #
+          # Not because 133 makes the build reproducible — it does not, and
+          # `wasm/README.md` says why — but because an optimizer bump should be
+          # a diff somebody approved, not a side effect of a toolchain update.
           export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
           wasm-opt --version
           case "$(wasm-opt --version)" in

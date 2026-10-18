@@ -28,6 +28,11 @@ test('reports violations with position and severity', async () => {
     column: 1,
     level: 'warning',
   })
+  // The rest of the shape a consumer reads. `message` and `file` come out of
+  // `Main.hs`'s port of upstream's JSON encoder, and since the byte-equality
+  // test went, this is what notices if that port stops emitting a field.
+  expect(typeof results[0]?.message).toBe('string')
+  expect(typeof results[0]?.file).toBe('string')
   expect(results[1]).toMatchObject({ code: 'DL3009', line: 2, level: 'info' })
 })
 
@@ -36,6 +41,10 @@ test('reports an unparseable Dockerfile instead of throwing', async () => {
 
   expect(results).toHaveLength(1)
   expect(results[0]).toMatchObject({ code: 'DL1000', line: 1, level: 'error' })
+  // A parse error goes through the *other* `ToJSON` instance in `Main.hs`, so
+  // its shape is asserted rather than assumed to match the finding path.
+  expect(typeof results[0]?.message).toBe('string')
+  expect(typeof results[0]?.file).toBe('string')
 })
 
 test('suppresses rules passed to `ignore`', async () => {
