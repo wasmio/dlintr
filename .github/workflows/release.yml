@@ -4,76 +4,115 @@ on:
   push:
     branches:
       - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A publish that has started must finish.
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
 jobs:
-  # `changesets/action` publishes only when no changesets are left, which is
-  # what a merged version PR looks like; otherwise it opens that PR. The wasm is
-  # needed for the first case and not the second, and it takes a toolchain
-  # install to produce, so decide before spending anything on it.
-  detect:
-    name: Is this a publish?
+  # Opens or updates the version PR, and decides whether this run should publish.
+  #
+  # `changesets/action` reports `has-changesets`: true while unreleased changesets
+  # exist, in which case it opens the version PR; false once that PR is merged.
+  # False alone does not mean "publish" — a re-run of `main`, or a publish that
+  # failed halfway, leaves the version already on npm — so the registry is asked
+  # directly. That is the difference between "nothing to version" and "something
+  # to publish".
+  release:
+    name: Version or prepare release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
-      publish: ${{ steps.check.outputs.publish }}
+      publish: ${{ steps.package-version.outputs.publish }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Changesets needs history for changelogs and the version PR branch.
+          fetch-depth: 0
 
-      - name: Check for unreleased changesets
-        id: check
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js LTS
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install Dependencies
+        run: pnpm i
+
+      - name: Create or update the version PR
+        id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          version-script: pnpm run version
+          commit-message: 'chore: release dlintr'
+          pr-title: 'chore: release dlintr'
+
+      - name: Is this version already on npm?
+        id: package-version
+        if: steps.changesets.outputs.has-changesets == 'false'
         run: |
-          if compgen -G '.changeset/*.md' | grep -qv 'README.md'; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          name=$(jq -r .name package.json)
+          version=$(jq -r .version package.json)
+          encoded_name=${name//\//%2f}
+          status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+            "https://registry.npmjs.org/${encoded_name}/${version}")
+          case "$status" in
+            200)
+              echo "${name}@${version} is already published; nothing to do."
+              ;;
+            404)
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              echo "${name}@${version} is not published yet."
+              ;;
+            *)
+              echo "npm registry answered ${status} for ${name}@${version}" >&2
+              exit 1
+              ;;
+          esac
 
-  # The binary has to exist before `pnpm release` runs, because `pnpm build`
-  # packs it into the npm tarball. So build it here rather than downloading it
-  # from a release that does not exist yet — the tag for this version is created
-  # by the very step below.
+  # The tarball has to contain the wasm, and `pnpm build` packs it, so it must
+  # exist before the publish job runs.
   wasm:
     name: Build hadolint.wasm
-    needs: detect
-    if: needs.detect.outputs.publish == 'true'
+    needs: release
+    if: needs.release.outputs.publish == 'true'
     permissions:
       contents: read
       id-token: write
       attestations: write
     uses: ./.github/workflows/wasm.yml
 
-  release:
-    name: Release
+  publish:
+    name: Publish to npm
     needs:
-      - detect
+      - release
       - wasm
-    # `always()` because a skipped `wasm` — the version-PR path — must not skip
-    # the release, which is the case that does not need a binary at all.
-    #
-    # A *failed* `wasm` is a different thing, and it must stop the publish. That
-    # hole was wide open: the download below is skipped when `wasm` did not
-    # succeed, `pnpm build` no longer needs a binary to succeed, and `pnpm pack`
-    # then packs a tarball without one and exits 0 — measured, not reasoned. The
-    # package would have shipped with no wasm in it and every check green.
-    if: >-
-      always() && needs.detect.result == 'success' &&
-      (needs.detect.outputs.publish == 'false' || needs.wasm.result == 'success')
+    # Both: something to publish, and a build that succeeded. The second is what
+    # stops a binary-less tarball — `pnpm build` and `pnpm pack` both exit 0
+    # without the wasm, measured, so nothing downstream would have caught it.
+    if: needs.release.outputs.publish == 'true' && needs.wasm.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
       id-token: write
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
           fetch-depth: 0
 
       - name: Download hadolint.wasm
-        if: needs.wasm.result == 'success'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: hadolint-wasm
@@ -90,19 +129,9 @@ jobs:
       - name: Install Dependencies
         run: pnpm i
 
-      # `pnpm release` runs the `prerelease` hook, which is `pnpm build`, which
-      # packs `hadolint.wasm` into the npm tarball. The two files were downloaded
-      # above, and `needs: wasm` is what guarantees them: a publish that somehow
-      # lost its artifact never reaches here.
-      #
-      # Nothing is attached to the release. The tarball is the delivery, and it
-      # is the content-addressed, immutable one; a second copy on the release
-      # would only be npm's copy again, in a place nothing fetches from.
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
-        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
-        with:
-          publish-script: pnpm release
-          version-script: pnpm run version
-          commit-message: 'chore: release dlintr'
-          pr-title: 'chore: release dlintr'
+      # `pnpm release` runs the `prerelease` hook — `pnpm build`, which packs the
+      # wasm into the tarball — then `changeset publish`, which also tags and
+      # creates the GitHub release. Nothing is attached to that release: the
+      # npm tarball is the delivery.
+      - name: Publish
+        run: pnpm release
