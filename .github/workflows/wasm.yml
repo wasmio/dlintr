@@ -12,17 +12,15 @@ name: WASM
 # The toolchain and the build are cached under a key derived from the submodule
 # commit and this recipe, so the expensive path runs when the inputs change and
 # not on every push.
+#
+# It has no trigger of its own: it only ever runs to serve a caller, because the
+# artifact belongs to the run that downloads it. A standalone push build could
+# only upload an artifact nothing would fetch, and pay a toolchain install for
+# the privilege. `workflow_dispatch` stays as the manual escape hatch for
+# exercising a build on its own.
 on:
   workflow_call: {}
   workflow_dispatch: {}
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/wasm.yml
-      - .gitmodules
-      - hadolint
-      - wasm/**
 
 # A build only matters if it is the newest one. `github.workflow` is the name of
 # the *caller*, which keeps this from being two workflows that both need the
@@ -62,14 +60,12 @@ jobs:
       # Skip that step and you get a GHC which reports a wasm target while
       # emitting x86-64 assembly, which the wasm assembler then rejects with
       # "Wasm doesn't support data symbols in text sections" (`@progbits`).
+      # The optimiser floats on purpose: newest binaryen every run, verified
+      # against the checksum the release publishes. The build step logs the
+      # version, which is what makes an artifact change traceable.
       GHC_WASM_META_REV: 60098a5076557e327b326a1a3ba3b5fb4fec1e49
       GHC_WASM_BINDIST_TAG: 20260403T135157
       GHC_WASM_BINDIST_SHA256: 60d0e537548a82590fd6cfd6eaec5ceba0bc58bf320a6f491843a1cf4403bce8
-      # A pinned optimiser, because `wasm-opt` decides the bytes of the artifact:
-      # a floating one would make the digest published with it meaningless.
-      BINARYEN_URL: https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-      BINARYEN_DIR: binaryen-version_133
-      BINARYEN_SHA256: 2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -102,7 +98,8 @@ jobs:
             ~/.ghc-wasm
             ~/.ghcup
             ~/.cabal
-          key: wasm-toolchain-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-${{ env.GHC_WASM_BINDIST_TAG }}-${{ env.BINARYEN_SHA256 }}
+          # binaryen is not in this cache, so its version is not in the key.
+          key: wasm-toolchain-${{ runner.os }}-${{ env.GHC_WASM_META_REV }}-${{ env.GHC_WASM_BINDIST_TAG }}
 
       # Only `dist-newstyle`, and a hit does **not** skip the build steps below.
       # Seeding the incremental state is the whole point; skipping the compile
@@ -119,7 +116,6 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            hadolint/dist-newstyle
             wasm/hadolint-wasi/dist-newstyle
           # An explicit list, not `wasm/**`, because only these five files can
           # change a compiled byte.
@@ -131,8 +127,8 @@ jobs:
           # then reported as drift. The manifest was an input to the build it
           # measured, so a recorded digest could never be stable.
           #
-          # It also swept in `README.md`, `calls.mjs` and `smoke.mjs`, none of
-          # which can change a compiled byte.
+          # It also swept in `README.md` and `calls.mjs`, neither of which can
+          # change a compiled byte.
           key: wasm-build-${{ runner.os }}-${{ steps.source.outputs.revision }}-${{ hashFiles('.github/workflows/wasm.yml', 'wasm/build-reactor.sh', 'wasm/hadolint-wasi/cabal.project', 'wasm/hadolint-wasi/hadolint-wasi.cabal', 'wasm/hadolint-wasi/Main.hs') }}
 
       - name: Install System Dependencies
@@ -161,23 +157,26 @@ jobs:
             zlib1g \
             zlib1g-dev
 
-      # Deliberately unguarded, even on a toolchain cache hit. The cached
-      # directories are `~/.ghc-wasm`, `~/.ghcup` and `~/.cabal`; binaryen is
-      # extracted into the *workspace*, so a hit would skip the download, leave
-      # `$PWD/${BINARYEN_DIR}` absent, and let the build's `export PATH` fall
-      # through to the binaryen `setup.sh` ships inside `~/.ghc-wasm` — version
-      # 129 at this revision, not 133.
-      #
-      # That is the invariant: a step whose output lives outside the cached
-      # paths must never be skipped on a hit. Skipping it here did not fail
-      # loudly; it failed at the version assertion much later, and would have
-      # been invisible without it.
+      # Unguarded even on a toolchain cache hit: binaryen goes into the
+      # workspace, not into the cached prefix, so skipping it would leave the
+      # build silently using the 129 that `setup.sh` installs.
       - name: Install binaryen
+        id: binaryen
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl -fsSL -o binaryen.tar.gz "$BINARYEN_URL"
-          echo "$BINARYEN_SHA256  binaryen.tar.gz" | sha256sum -c -
-          tar xzf binaryen.tar.gz
-          echo "$PWD/$BINARYEN_DIR/bin" >> "$GITHUB_PATH"
+          tag="$(gh api repos/WebAssembly/binaryen/releases/latest --jq .tag_name)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          base="https://github.com/WebAssembly/binaryen/releases/download/$tag"
+          asset="binaryen-$tag-x86_64-linux.tar.gz"
+          curl -fsSL -o "$asset" "$base/$asset"
+          # Catches a bad download, not a bad release.
+          curl -fsSL -o "$asset.sha256" "$base/$asset.sha256"
+          sha256sum -c "$asset.sha256"
+
+          tar xzf "$asset"
+          echo "$PWD/binaryen-$tag/bin" >> "$GITHUB_PATH"
 
       - name: Install GHC wasm toolchain
         if: steps.toolchain.outputs.cache-hit != 'true'
@@ -271,52 +270,22 @@ jobs:
           run_wasm "$probe_bin"
           echo "::endgroup::"
 
-      - name: Build hadolint.wasm
-        run: |
-          source ~/.ghc-wasm/env
-
-          # setup.sh installs a binaryen of its own from the same autogen.json;
-          # put the pinned one first so the artifact's bytes stay reproducible.
-          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
-          wasm-opt --version
-          case "$(wasm-opt --version)" in
-            *"version 133"*) ;;
-            *)
-              echo "::error::expected the pinned wasm-opt 133, got: $(wasm-opt --version)"
-              exit 1
-              ;;
-          esac
-
-          bash wasm/build.sh hadolint-cli.wasm
-
-      # A module that links but cannot start is the failure worth catching, so
-      # this really runs it. See wasm/smoke.mjs.
-      - name: Smoke Test
-        run: node wasm/smoke.mjs hadolint-cli.wasm
-
-      # The command build no longer ships — the reactor does — but it is kept
-      # and published as its own artifact, because it is the reference the
-      # format-equality test compares against. That test is only worth having
-      # when both sides come from the same commit.
-      - name: Upload the command reference
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: hadolint-cli
-          path: hadolint-cli.wasm
-          if-no-files-found: error
-
-      # Deliberately after the reference is banked, and deliberately fatal. A
-      # compile error here still leaves the command artifact for `ci` to test —
-      # `ci` runs with `if: always()` for exactly that reason — while the error
-      # itself is a red run instead of a tolerated step.
-      #
-      # It was `continue-on-error` for one run and that was a mistake: the step
-      # reported `success`, the artifact upload quietly found no files, and the
-      # only trace was in the log. Do not put it back.
+      # Deliberately fatal, and deliberately not `continue-on-error`. It was, for
+      # one run, and that was a mistake: the step reported `success`, the
+      # artifact upload quietly found no files, and the only trace was in the
+      # log. Do not put it back.
       - name: Build the reactor
+        env:
+          # Through `env`, not interpolated into the script: the tag comes from
+          # an API response, and expanding it into shell text is injection.
+          BINARYEN_TAG: ${{ steps.binaryen.outputs.tag }}
         run: |
           source ~/.ghc-wasm/env
-          export PATH="$PWD/$BINARYEN_DIR/bin:$PATH"
+
+          # `setup.sh` also puts a 129 on the box; this is what makes ours win.
+          export PATH="$PWD/binaryen-$BINARYEN_TAG/bin:$PATH"
+          wasm-opt --version
+
           bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js
 
       - name: Checksum

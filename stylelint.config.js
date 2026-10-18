@@ -6,8 +6,8 @@ export default {
     '**/*.{cjs,cts,js,json,json5,jsonc,jsx,mjs,mts,ts,tsx}',
     '**/*.d.ts',
     // These suffixes are never CSS, and the patterns are anchored so that they
-    // also cover nested files (`wasm/hadolint-wasm32-cli.patch`,
-    // `wasm/build.sh`); a bare `*.patch` only reached the repository root.
+    // also cover nested files (`wasm/build-reactor.sh`); a bare `*.sh` would
+    // only reach the repository root.
     '**/*.log',
     '**/*.patch',
     '**/*.sh',

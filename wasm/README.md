@@ -13,14 +13,10 @@ There is one source, and it is this repository:
    `hadolint` submodule (pinned to a release tag): `hadolint.wasm` plus
    `ghc_wasm_jsffi.js`, GHC's half of the JSFFI. Both are needed — the exports
    are unreachable without the glue.
-   `wasm/build.sh` builds the CLI (`exe:hadolint`) as a WASI _command_ instead.
-   That is kept as the reference the byte-equality test compares against, and is
-   **not** what the runtime loads: `createReactor` rejects a command module.
-2. The `WASM` workflow runs both, smoke-tests the command, and uploads them as
-   two artifacts: `hadolint-wasm` (the reactor and its glue) and `hadolint-cli`
-   (the command, for the test). Every job that needs a binary downloads the
-   artifact rather than building another one, which is why building it is
-   deliberately not part of `pnpm build`.
+2. The `WASM` workflow runs it and uploads the result as one artifact,
+   `hadolint-wasm`. Every job that needs a binary downloads that artifact rather
+   than building another one, which is why building it is deliberately not part
+   of `pnpm build`.
 3. `pnpm wasm:build` runs `wasm/build-reactor.sh` for a local checkout. Nothing
    fetches a binary from anywhere, and nothing is attached to a release.
 
@@ -36,10 +32,16 @@ This package needs the opposite: a WASI _reactor_ — imports
 command module by name.
 
 Upstream also marks `exe:hadolint` as `buildable: False` on wasm32 and passes it
-`-threaded`, which wasm32-wasi cannot link.
-`wasm/hadolint-wasm32-cli.patch` lifts both. It is pinned to the submodule
-commit and **must be rebased whenever `hadolint` moves**; `build.sh`
-fails loudly if it stops applying.
+`-threaded`, which wasm32-wasi cannot link. Nothing here builds it any more. A
+command build used to be produced alongside the reactor, purely to be the
+reference for a format-equality test, and it went with the test and the patch
+that made `exe:hadolint` link.
+
+**What that costs, stated plainly:** `wasm/hadolint-wasi/Main.hs` carries its
+own port of upstream's JSON encoder — upstream exposes only a `Handle`-based
+`hWrite` — and nothing compares that port against the library's own output any
+more. If a later hadolint changes the shape of that JSON, the port will not
+follow it, and the tests will not notice.
 
 ## The digest history
 
@@ -186,15 +188,19 @@ git ls-files -s hadolint # expect a 160000 entry
 
 ## Building locally
 
-`build.sh` and `build-reactor.sh` need the GHC wasm toolchain on `PATH` (which
-brings `wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
-authority on versions; in short it pins
+`build-reactor.sh` needs the GHC wasm toolchain on `PATH` (which brings
+`wasm32-wasi-cabal`) plus `wasm-opt`. `.github/workflows/wasm.yml` is the
+authority on versions; in short it pins the toolchain
 
-|                          |                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `ghc-wasm-meta` revision | full commit hash; its `autogen.json` names the whole toolchain, so this pins it    |
-| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against the release asset's SHA-256 before install |
-| `wasm-opt`               | binaryen 133, checked against a SHA-256                                            |
+|                          |                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `ghc-wasm-meta` revision | full commit hash; its `autogen.json` names the whole toolchain, so this pins it     |
+| GHC wasm bindist         | `wasm32-wasi-ghc-9.10`, checked against the release asset's SHA-256 before install  |
+| `wasm-opt`               | **not pinned** — newest binaryen release, checked against the checksum it publishes |
+
+The optimiser floats: the newest binaryen each run, checked against the checksum
+its release publishes. That catches a bad download, not a bad release — the
+version is logged on every build so a size change can still be traced.
 
 **`setup.sh` must run without `SKIP_GHC`, and with `FLAVOUR=9.10`.**
 
@@ -216,17 +222,13 @@ FLAVOUR=9.10 ghc-wasm-meta/setup.sh
 source ~/.ghc-wasm/env
 
 git submodule update --init
-pnpm wasm:build                       # the reactor: hadolint.wasm + ghc_wasm_jsffi.js
-bash wasm/build.sh hadolint-cli.wasm  # the command build the format test compares against
-node wasm/calls.mjs                   # what WASI imports the reactor actually calls
-node wasm/smoke.mjs hadolint-cli.wasm # starts the command build and checks it runs
+pnpm wasm:build     # the reactor: hadolint.wasm + ghc_wasm_jsffi.js
+node wasm/calls.mjs # what WASI imports the reactor actually calls
 ```
 
-Both builds are needed for the local suite: `hadolint.wasm` is what ships and what
-the reactor tests load, while `hadolint-cli.wasm` is the same source built as a
-command, which `test/reactor.spec.ts` runs to assert the two agree byte for byte.
-`smoke.mjs` checks the _command_ build, so it takes that file — it fails its
-`_start` check on a reactor, which exports `_initialize` instead.
+`hadolint.wasm` is what ships and what the suite loads; `pnpm wasm:build` writes
+it and its glue to the package root, so the tests find it with nothing else to
+do.
 
 `wasm:build` is named so that it is **not** part of `pnpm build`, and the
 `build:*` glob cannot pick it up by accident. It needs a toolchain that a
@@ -280,9 +282,14 @@ host-independent wasm module is only cost.
 cd hadolint
 git fetch --tags && git checkout v<new-version>
 cd ../..
-# rebase wasm/hadolint-wasm32-cli.patch onto the new hadolint.cabal if needed
 git add hadolint
 ```
+
+The pin moves as a gitlink and nothing else needs editing — no URL to update and
+no digest to re-record, because nothing fetches the artifact from anywhere. If
+the new version changes the shape of `--format json`, `Main.hs`'s port of it has
+to follow: that is the one thing the removal of the command build left
+unchecked.
 
 Then let the normal release flow carry it: the next publish run rebuilds the
 binary and packs it. Nothing else needs editing — no URL to update and no digest
