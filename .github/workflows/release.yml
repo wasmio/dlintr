@@ -14,14 +14,11 @@ permissions:
   contents: read
 
 jobs:
-  # Opens or updates the version PR, and decides whether this run should publish.
+  # Versions, and decides whether this run should publish.
   #
-  # `changesets/action` reports `has-changesets`: true while unreleased changesets
-  # exist, in which case it opens the version PR; false once that PR is merged.
-  # False alone does not mean "publish" — a re-run of `main`, or a publish that
-  # failed halfway, leaves the version already on npm — so the registry is asked
-  # directly. That is the difference between "nothing to version" and "something
-  # to publish".
+  # `has-changesets` means "nothing left to version", not "publish" — a re-run of
+  # `main`, or a publish that failed halfway, leaves the version already on npm —
+  # so the registry is asked.
   release:
     name: Version or prepare release
     runs-on: ubuntu-latest
@@ -34,7 +31,6 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Changesets needs history for changelogs and the version PR branch.
           fetch-depth: 0
 
       - name: Setup pnpm
@@ -81,8 +77,7 @@ jobs:
               ;;
           esac
 
-  # The tarball has to contain the wasm, and `pnpm build` packs it, so it must
-  # exist before the publish job runs.
+  # Must exist before publishing: `pnpm build` packs it into the tarball.
   wasm:
     name: Build hadolint.wasm
     needs: release
@@ -95,9 +90,8 @@ jobs:
 
   publish:
     name: Publish to npm
-    # No `if`: a job that needs a skipped or failed job is skipped by default,
-    # which is the gate wanted here. `wasm` only runs when there is something to
-    # publish, and `pnpm build` exits 0 without the wasm — measured — so a failed
+    # No `if`: a job needing a failed or skipped job is already skipped, which is
+    # the gate wanted — and `pnpm build` exits 0 without the wasm, so a failed
     # build must not reach the publish.
     needs: wasm
     runs-on: ubuntu-latest
@@ -127,10 +121,8 @@ jobs:
       - name: Install Dependencies
         run: pnpm i
 
-      # Packs `hadolint.wasm` into the tarball. Kept out of the publish step so
-      # the action parses publish output only, not build output.
-      - name: Build
-        run: pnpm build
-
+      # The same command a human runs: builds, then publishes.
       - name: Publish
         uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          script: pnpm release
