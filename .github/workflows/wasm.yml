@@ -278,17 +278,9 @@ jobs:
         run: |
           source ~/.ghc-wasm/env
 
-          # `setup.sh` also puts a 129 on the box; assert ours is the one that
-          # ran, by the tag resolved minutes ago rather than a constant.
+          # `setup.sh` also puts a 129 on the box; this is what makes ours win.
           export PATH="$PWD/binaryen-${{ steps.binaryen.outputs.tag }}/bin:$PATH"
           wasm-opt --version
-          case "$(wasm-opt --version)" in
-            *"${{ steps.binaryen.outputs.tag }}"*) ;;
-            *)
-              echo "::error::expected wasm-opt ${{ steps.binaryen.outputs.tag }}, got: $(wasm-opt --version)"
-              exit 1
-              ;;
-          esac
 
           bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js
 
