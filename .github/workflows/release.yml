@@ -95,13 +95,11 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs:
-      - release
-      - wasm
-    # Both: something to publish, and a build that succeeded. The second is what
-    # stops a binary-less tarball — `pnpm build` and `pnpm pack` both exit 0
-    # without the wasm, measured, so nothing downstream would have caught it.
-    if: needs.release.outputs.publish == 'true' && needs.wasm.result == 'success'
+    # No `if`: a job that needs a skipped or failed job is skipped by default,
+    # which is the gate wanted here. `wasm` only runs when there is something to
+    # publish, and `pnpm build` exits 0 without the wasm — measured — so a failed
+    # build must not reach the publish.
+    needs: wasm
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -129,9 +127,10 @@ jobs:
       - name: Install Dependencies
         run: pnpm i
 
-      # `pnpm release` runs the `prerelease` hook — `pnpm build`, which packs the
-      # wasm into the tarball — then `changeset publish`, which also tags and
-      # creates the GitHub release. Nothing is attached to that release: the
-      # npm tarball is the delivery.
+      # Packs `hadolint.wasm` into the tarball. Kept out of the publish step so
+      # the action parses publish output only, not build output.
+      - name: Build
+        run: pnpm build
+
       - name: Publish
-        run: pnpm release
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
