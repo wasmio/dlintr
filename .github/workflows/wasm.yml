@@ -275,11 +275,15 @@ jobs:
       # artifact upload quietly found no files, and the only trace was in the
       # log. Do not put it back.
       - name: Build the reactor
+        env:
+          # Through `env`, not interpolated into the script: the tag comes from
+          # an API response, and expanding it into shell text is injection.
+          BINARYEN_TAG: ${{ steps.binaryen.outputs.tag }}
         run: |
           source ~/.ghc-wasm/env
 
           # `setup.sh` also puts a 129 on the box; this is what makes ours win.
-          export PATH="$PWD/binaryen-${{ steps.binaryen.outputs.tag }}/bin:$PATH"
+          export PATH="$PWD/binaryen-$BINARYEN_TAG/bin:$PATH"
           wasm-opt --version
 
           bash wasm/build-reactor.sh hadolint.wasm ghc_wasm_jsffi.js

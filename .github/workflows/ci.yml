@@ -26,13 +26,12 @@ jobs:
 
   ci:
     name: Lint and Test with Node.js ${{ matrix.node }} on ${{ matrix.os }}
+    # Gated on the build, with no `always()`. That guard existed while the job
+    # also produced a command reference: the reactor could fail and the suite
+    # still had something to run against. With only the reactor left there is
+    # nothing to fall back to, and twelve legs starting just to fail at the
+    # download is noise on top of the real failure.
     needs: wasm
-    # The `wasm` job builds the command artifact first and the reactor last, and
-    # only the reactor is allowed to fail the job. `always()` keeps the suite
-    # running against the artifact that was already uploaded, rather than a
-    # reactor compile error skipping every test. If the artifact genuinely is
-    # missing, the download below fails and says so.
-    if: always()
     strategy:
       # `fail-fast: false` stood here while the WASM matrix was being
       # stabilised: a single failing job was cancelling the other eleven and
