@@ -168,11 +168,16 @@ jobs:
           tag="$(gh api repos/WebAssembly/binaryen/releases/latest --jq .tag_name)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-          base="https://github.com/WebAssembly/binaryen/releases/download/$tag"
           asset="binaryen-$tag-x86_64-linux.tar.gz"
-          curl -fsSL -o "$asset" "$base/$asset"
+          # `gh release download` rather than a bare curl: it sends the token,
+          # so the CDN does not treat a shared runner IP as anonymous traffic.
+          # An unauthenticated download is what returned `curl: (22) ... 403` on
+          # one leg while the other three on the same commit succeeded.
+          gh release download "$tag" \
+            --repo WebAssembly/binaryen \
+            --pattern "$asset*"
+
           # Catches a bad download, not a bad release.
-          curl -fsSL -o "$asset.sha256" "$base/$asset.sha256"
           sha256sum -c "$asset.sha256"
 
           tar xzf "$asset"
