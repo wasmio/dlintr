@@ -93,6 +93,15 @@ const checkLabel = (label: string, type: string): void => {
   }
 }
 
+/** Reject a registry the comma-separated encoding would split in two. */
+const checkRegistry = (registry: string): void => {
+  if (registry.includes(',')) {
+    throw new TypeError(
+      `dlintr: registry ${JSON.stringify(registry)} cannot contain a comma`,
+    )
+  }
+}
+
 /** The options that have a `HADOLINT_*` spelling. */
 const explicit = (options: LintOptions): Array<[string, string]> => {
   const pairs: Array<[string, string]> = []
@@ -104,6 +113,9 @@ const explicit = (options: LintOptions): Array<[string, string]> => {
     pairs.push(...overrides(options.severityOverrides))
   }
   if (options.trustedRegistries) {
+    for (const registry of options.trustedRegistries) {
+      checkRegistry(registry)
+    }
     pairs.push([
       'HADOLINT_TRUSTED_REGISTRIES',
       options.trustedRegistries.join(','),
@@ -149,11 +161,20 @@ const environment = (options: LintOptions): readonly string[] => {
   // hadolint resolves its config through `getHomeDirectory`, and GHC's
   // implementation falls back to `getEffectiveUserID`, which wasip1 does not
   // provide. Without `HOME` the reactor dies before linting anything.
-  const pairs = new Map<string, string>([
-    ['HOME', '/'],
-    ...inherited(),
-    ...explicit(options),
-  ])
+  const pairs = new Map<string, string>([['HOME', '/'], ...inherited()])
+
+  for (const [key, value] of explicit(options)) {
+    // An empty value is not the same as an absent one to hadolint: it reads
+    // `HADOLINT_TRUSTED_REGISTRIES=` as the single registry "", which matches
+    // nothing, and `HADOLINT_IGNORE=` as one unusable rule code. Removing the
+    // key is what "unset" means, and it clears any inherited value for the
+    // same reason.
+    if (value === '') {
+      pairs.delete(key)
+    } else {
+      pairs.set(key, value)
+    }
+  }
 
   return [...pairs].map(([key, value]) => `${key}=${value}`)
 }
@@ -172,6 +193,19 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
   /** Keys whose load has settled, so eviction never drops one still in flight. */
   const settled = new Set<string>()
 
+  /** Drop the oldest settled keys until the cache is back within its bound. */
+  const trim = (): void => {
+    for (const candidate of reactors.keys()) {
+      if (reactors.size <= MAX_REACTORS) {
+        return
+      }
+      if (settled.has(candidate)) {
+        reactors.delete(candidate)
+        settled.delete(candidate)
+      }
+    }
+  }
+
   const instance = (options: LintOptions): Promise<Reactor> => {
     const pairs = environment(options)
     // `JSON.stringify` rather than a join: exact even when a value contains the
@@ -184,7 +218,12 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       reactors.set(key, reactor)
 
       reactor.then(
-        () => settled.add(key),
+        () => {
+          settled.add(key)
+          // A burst of distinct loads can overshoot the bound while they are
+          // all pending; once one settles there is something safe to drop.
+          trim()
+        },
         () => {
           // A cached rejection would make one transient failure permanent — but
           // only delete this load's entry, since an eviction may have let a
@@ -196,17 +235,7 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
         },
       )
 
-      // A `Map` iterates in insertion order, so the first *settled* key is the
-      // oldest that is safe to drop; the one just added is still in flight.
-      if (reactors.size > MAX_REACTORS) {
-        for (const candidate of reactors.keys()) {
-          if (settled.has(candidate)) {
-            reactors.delete(candidate)
-            settled.delete(candidate)
-            break
-          }
-        }
-      }
+      trim()
     }
     return reactor
   }

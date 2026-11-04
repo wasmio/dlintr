@@ -201,3 +201,25 @@ test('rejects a label type hadolint cannot read', async () => {
     lint(CLEAN, { requireLabels: { maintainer: 'string' as LabelType } }),
   ).rejects.toThrow(TypeError)
 })
+
+test('an empty trustedRegistries list does not mean "trust nothing"', async () => {
+  // hadolint reads `HADOLINT_TRUSTED_REGISTRIES=` as the single registry "",
+  // so writing that value would make DL3026 fire on every image.
+  const empty = await lint(REGISTRY, { trustedRegistries: [] })
+  expect(empty.map(({ code }) => code)).not.toContain('DL3026')
+
+  process.env.HADOLINT_TRUSTED_REGISTRIES = 'docker.io'
+  try {
+    // And it clears an inherited value rather than writing an empty one.
+    const cleared = await lint(REGISTRY, { trustedRegistries: [] })
+    expect(cleared.map(({ code }) => code)).not.toContain('DL3026')
+  } finally {
+    delete process.env.HADOLINT_TRUSTED_REGISTRIES
+  }
+})
+
+test('rejects a registry containing a comma', async () => {
+  await expect(
+    lint(REGISTRY, { trustedRegistries: ['docker.io,evil.example'] }),
+  ).rejects.toThrow(TypeError)
+})

@@ -31,7 +31,9 @@ export type LabelType =
  * Every field is also read from the matching `HADOLINT_*` variable in
  * `process.env` when it is not given here, so a Node host can configure the
  * linter once for the whole process; a browser has no `process` and inherits
- * nothing. An explicit field wins over the variable, including when it is empty.
+ * nothing. An explicit field wins over the variable, including when it is empty:
+ * `ignore: []` or `trustedRegistries: []` removes the setting rather than
+ * writing an empty value, which hadolint would read as one unusable entry.
  */
 export interface LintOptions {
   /** Rule codes to suppress, e.g. `['DL3007']`. `HADOLINT_IGNORE`. */
