@@ -206,3 +206,13 @@ test('ignore and severityOverrides reach a parse error', async () => {
   const reified = await lint(BROKEN, { severityOverrides: { DL1000: 'style' } })
   expect(reified[0]).toMatchObject({ code: 'DL1000', level: 'style' })
 })
+
+test('an inherited HADOLINT_IGNORE reaches a parse error too', async () => {
+  process.env.HADOLINT_IGNORE = 'DL1000'
+  try {
+    const findings = await lint('FROM\n')
+    expect(findings.map(({ code }) => code)).not.toContain('DL1000')
+  } finally {
+    delete process.env.HADOLINT_IGNORE
+  }
+})

@@ -24,17 +24,27 @@ export interface Dlinter {
  */
 export type LoadReactor = (env: readonly string[]) => Promise<Reactor>
 
-/** The `HADOLINT_*` variables already set in `process.env`, if this is Node. */
-const inherited = (): Array<[string, string]> => {
-  const env = (
-    globalThis as { process?: { env?: Record<string, string | undefined> } }
-  ).process?.env
+/** `process.env` when this is Node, and nothing when it is not. */
+const processEnvironment = (): Record<string, string | undefined> =>
+  (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env ?? {}
 
-  return Object.entries(env ?? {}).filter(
+/** The `HADOLINT_*` variables already set in `process.env`, if this is Node. */
+const inherited = (): Array<[string, string]> =>
+  Object.entries(processEnvironment()).filter(
     (entry): entry is [string, string] =>
       entry[0].startsWith('HADOLINT_') && entry[1] !== undefined,
   )
-}
+
+/**
+ * A comma-separated variable, as hadolint reads it.
+ *
+ * Only `HADOLINT_IGNORE` needs this. The reactor applies it to the checks, but a
+ * parse error is `DL1000`, which sits outside that list — so an inherited ignore
+ * cannot suppress it unless the findings are filtered here too.
+ */
+const listFromEnv = (name: string): string[] =>
+  (processEnvironment()[name] ?? '').split(',').filter(Boolean)
 
 /** The types hadolint can read back out of `HADOLINT_REQUIRE_LABELS`. */
 const LABEL_TYPES: ReadonlySet<string> = new Set<LabelType>([
@@ -198,7 +208,7 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       // Filtering and relabelling happen here rather than in the reactor for one
       // reason: a parse error is reported as `DL1000` outside hadolint's check
       // list, so `HADOLINT_IGNORE` and `HADOLINT_OVERRIDE_*` cannot reach it.
-      const ignored = new Set(options.ignore ?? [])
+      const ignored = new Set(options.ignore ?? listFromEnv('HADOLINT_IGNORE'))
       return findings
         .filter(({ code }) => !ignored.has(code))
         .map(finding => {
