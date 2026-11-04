@@ -216,3 +216,13 @@ test('an inherited HADOLINT_IGNORE reaches a parse error too', async () => {
     delete process.env.HADOLINT_IGNORE
   }
 })
+
+test('an inherited HADOLINT_OVERRIDE_* reaches a parse error too', async () => {
+  process.env.HADOLINT_OVERRIDE_INFO = 'DL1000'
+  try {
+    const findings = await lint('FROM\n')
+    expect(findings[0]).toMatchObject({ code: 'DL1000', level: 'info' })
+  } finally {
+    delete process.env.HADOLINT_OVERRIDE_INFO
+  }
+})

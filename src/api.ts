@@ -24,10 +24,26 @@ export interface Dlinter {
  */
 export type LoadReactor = (env: readonly string[]) => Promise<Reactor>
 
-/** `process.env` when this is Node, and nothing when it is not. */
-const processEnvironment = (): Record<string, string | undefined> =>
-  (globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env ?? {}
+/** The levels hadolint re-levels a rule to, and the four variables it reads. */
+const SEVERITIES = ['error', 'info', 'style', 'warning'] as const
+
+/**
+ * `process.env` when this is Node, and nothing when it is not.
+ *
+ * Bundlers routinely shim `process` for browser code, and a shimmed
+ * `process.env` would let a browser inherit `HADOLINT_*` variables that were
+ * meant for a build step. `versions.node` is what a shim does not fake.
+ */
+const processEnvironment = (): Record<string, string | undefined> => {
+  const runtime = globalThis as {
+    process?: {
+      env?: Record<string, string | undefined>
+      versions?: { node?: string }
+    }
+  }
+
+  return runtime.process?.versions?.node ? (runtime.process.env ?? {}) : {}
+}
 
 /** The `HADOLINT_*` variables already set in `process.env`, if this is Node. */
 const inherited = (): Array<[string, string]> =>
@@ -36,15 +52,24 @@ const inherited = (): Array<[string, string]> =>
       entry[0].startsWith('HADOLINT_') && entry[1] !== undefined,
   )
 
-/**
- * A comma-separated variable, as hadolint reads it.
- *
- * Only `HADOLINT_IGNORE` needs this. The reactor applies it to the checks, but a
- * parse error is `DL1000`, which sits outside that list — so an inherited ignore
- * cannot suppress it unless the findings are filtered here too.
- */
+/** A comma-separated variable, as hadolint reads it. */
 const listFromEnv = (name: string): string[] =>
   (processEnvironment()[name] ?? '').split(',').filter(Boolean)
+
+/** `HADOLINT_OVERRIDE_*`, as the level each rule was raised to. */
+const overridesFromEnv = (): Partial<Record<string, Severity>> => {
+  const overrides: Partial<Record<string, Severity>> = {}
+
+  for (const level of SEVERITIES) {
+    for (const code of listFromEnv(
+      `HADOLINT_OVERRIDE_${level.toUpperCase()}`,
+    )) {
+      overrides[code] = level
+    }
+  }
+
+  return overrides
+}
 
 /** The types hadolint can read back out of `HADOLINT_REQUIRE_LABELS`. */
 const LABEL_TYPES: ReadonlySet<string> = new Set<LabelType>([
@@ -142,15 +167,14 @@ const environment = (options: LintOptions): readonly string[] => {
   // provide. Without `HOME` the reactor dies before linting anything.
   const pairs = new Map<string, string>([['HOME', '/'], ...inherited()])
 
-  // `ignore` and `severityOverrides` are applied to the findings in JS, so the
-  // reactor must not also apply an inherited copy — the explicit option wins.
-  if (options.ignore) {
-    pairs.delete('HADOLINT_IGNORE')
-  }
-  if (options.severityOverrides) {
-    for (const level of ['ERROR', 'WARNING', 'INFO', 'STYLE']) {
-      pairs.delete(`HADOLINT_OVERRIDE_${level}`)
-    }
+  // The finding-level configuration never reaches the reactor: it applies to the
+  // checks only, and a parse error is `DL1000`, outside that list. `lint`
+  // assembles the effective values from the options and the environment.
+  for (const name of [
+    'HADOLINT_IGNORE',
+    ...SEVERITIES.map(level => `HADOLINT_OVERRIDE_${level.toUpperCase()}`),
+  ]) {
+    pairs.delete(name)
   }
 
   for (const [key, value] of explicit(options)) {
@@ -202,18 +226,21 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       dockerfile: string,
       options: LintOptions = {},
     ): Promise<LintResult[]> => {
+      // Read before the first await, so a change to the environment while the
+      // reactor loads cannot apply to findings it was not built with.
+      const ignored = new Set(options.ignore ?? listFromEnv('HADOLINT_IGNORE'))
+      const overrides = options.severityOverrides ?? overridesFromEnv()
+
       const { lint } = await instance(options)
       const findings = JSON.parse(await lint(dockerfile)) as LintResult[]
 
       // Filtering and relabelling happen here rather than in the reactor for one
       // reason: a parse error is reported as `DL1000` outside hadolint's check
-      // list, so `HADOLINT_IGNORE` and `HADOLINT_OVERRIDE_*` cannot reach it.
-      const ignored = new Set(options.ignore ?? listFromEnv('HADOLINT_IGNORE'))
+      // list, so no environment variable can reach it.
       return findings
         .filter(({ code }) => !ignored.has(code))
         .map(finding => {
-          const level: Severity | undefined =
-            options.severityOverrides?.[finding.code]
+          const level: Severity | undefined = overrides[finding.code]
           return level ? { ...finding, level } : finding
         })
     },
