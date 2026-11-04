@@ -1,5 +1,25 @@
 # Change Log
 
+## 0.3.0
+
+### Minor Changes
+
+- [#42](https://github.com/wasmio/dlintr/pull/42) [`0742b50`](https://github.com/wasmio/dlintr/commit/0742b50da43bb889ac68e69ab318e6de08cf4503) Thanks [@JounQin](https://github.com/JounQin)! - The `env` option is gone; the configuration it carried is typed instead.
+
+  `LintOptions` now has `trustedRegistries`, `requireLabels`, `strictLabels` and `disableIgnorePragma`. On Node each one is also read from the matching `HADOLINT_*` variable in `process.env` when the option is absent, so a process can be configured once; an explicit option wins over the variable.
+
+  ```js
+  // before
+  lint(text, { env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' } })
+
+  // after
+  lint(text, { trustedRegistries: ['docker.io'] })
+  ```
+
+  `requireLabels` takes `{ label: type }`, where the type is one of `email`, `hash`, `rfc3339`, `semver`, `spdx`, `text`, `url` — hadolint spells the raw-text one `text`, not `string`.
+
+  An explicit empty list removes the setting: `trustedRegistries: []` means "no restriction" and also clears an inherited `HADOLINT_TRUSTED_REGISTRIES`, rather than writing an empty value that hadolint would read as a single unusable entry.
+
 ## 0.2.0
 
 ### Minor Changes
