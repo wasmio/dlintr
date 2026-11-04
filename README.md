@@ -60,7 +60,7 @@ const results = await lint('FROM ubuntu:latest\nRUN apt-get update\n')
 await lint('FROM alpine:3.20\n', {
   ignore: ['DL3009'], // rule codes to suppress, applied to the findings
   severityOverrides: { DL3007: 'error' }, // re-level a single rule
-  env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' }, // anything hadolint reads
+  trustedRegistries: ['docker.io'], // DL3026 accepts these
 })
 
 await getVersion() // 'Haskell Dockerfile Linter 2.15.1'
@@ -93,7 +93,11 @@ hadolint's command-line interface, and now exports `lint()` and
   no longer configurable.
 - `ignore` and `severityOverrides` survive, applied to the returned findings —
   they only ever filtered and relabelled, so they never needed the Haskell side.
-- `env` survives too, and reaches hadolint through WASI as before.
+- The configuration `ignore` did not cover is now typed rather than a bag of
+  environment strings: `trustedRegistries`, `requireLabels`, `strictLabels` and
+  `disableIgnorePragma`. On Node every one of them is also read from the matching
+  `HADOLINT_*` variable in `process.env` when you leave it out, so a host can be
+  configured once for the whole process; an explicit option wins.
 - **`node:wasi` cannot host this module at all.** Its `initialize` ends in
   `proc_exit(71)` and the RTS never starts, so every call answers "RTS is not
   initialised". That is true of upstream's published reactor as well, so it is a
