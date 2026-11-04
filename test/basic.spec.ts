@@ -2,7 +2,7 @@ import { createDlinter } from '../src/api.js'
 import type { Reactor } from '../src/reactor.js'
 
 import { getVersion, lint } from 'dlintr'
-import type { Severity } from 'dlintr'
+import type { LabelType, Severity } from 'dlintr'
 
 /** A pinned base image, which hadolint has nothing to say about. */
 const CLEAN = 'FROM alpine:3.20\n'
@@ -192,4 +192,12 @@ test('bounds the reactor cache instead of leaking one per configuration', async 
   expect(loads).toBe(configurations + 1)
   await dlinter.lint('FROM x\n', { ignore: ['DL8'] })
   expect(loads).toBe(configurations + 1)
+})
+
+test('rejects a label type hadolint cannot read', async () => {
+  // hadolint drops a requirement whose type it does not recognise, which would
+  // silently stop the label being required rather than failing.
+  await expect(
+    lint(CLEAN, { requireLabels: { maintainer: 'string' as LabelType } }),
+  ).rejects.toThrow(TypeError)
 })

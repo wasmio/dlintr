@@ -1,5 +1,5 @@
 import type { Reactor } from './reactor.js'
-import type { LintOptions, LintResult, Severity } from './types.js'
+import type { LabelType, LintOptions, LintResult, Severity } from './types.js'
 
 /** The public surface, independent of which host is underneath. */
 export interface Dlinter {
@@ -61,6 +61,38 @@ const overrides = (
   ])
 }
 
+/** The types hadolint can read back out of `HADOLINT_REQUIRE_LABELS`. */
+const LABEL_TYPES: ReadonlySet<string> = new Set<LabelType>([
+  'email',
+  'hash',
+  'rfc3339',
+  'semver',
+  'spdx',
+  'text',
+  'url',
+])
+
+/**
+ * Reject a `requireLabels` entry the `name:type` encoding cannot carry.
+ *
+ * hadolint splits the schema on commas and then on the first colon, so a name
+ * holding either would quietly become two requirements, or one with a truncated
+ * name. It also *drops* a requirement whose type it cannot read, so an unknown
+ * type would silently stop the label being required at all.
+ */
+const checkLabel = (label: string, type: string): void => {
+  if (label.includes(',') || label.includes(':')) {
+    throw new TypeError(
+      `dlintr: label name ${JSON.stringify(label)} cannot contain a comma or a colon`,
+    )
+  }
+  if (!LABEL_TYPES.has(type)) {
+    throw new TypeError(
+      `dlintr: unknown label type ${JSON.stringify(type)} for ${JSON.stringify(label)}`,
+    )
+  }
+}
+
 /** The options that have a `HADOLINT_*` spelling. */
 const explicit = (options: LintOptions): Array<[string, string]> => {
   const pairs: Array<[string, string]> = []
@@ -78,21 +110,13 @@ const explicit = (options: LintOptions): Array<[string, string]> => {
     ])
   }
   if (options.requireLabels) {
-    for (const label of Object.keys(options.requireLabels)) {
-      // hadolint splits the schema on commas and then on the first colon, so a
-      // name holding either would quietly become two requirements, or one with
-      // a truncated name. Say so here instead.
-      if (label.includes(',') || label.includes(':')) {
-        throw new TypeError(
-          `dlintr: label name ${JSON.stringify(label)} cannot contain a comma or a colon`,
-        )
-      }
+    const labels = Object.entries(options.requireLabels)
+    for (const [label, type] of labels) {
+      checkLabel(label, type)
     }
     pairs.push([
       'HADOLINT_REQUIRE_LABELS',
-      Object.entries(options.requireLabels)
-        .map(([label, type]) => `${label}:${type}`)
-        .join(','),
+      labels.map(([label, type]) => `${label}:${type}`).join(','),
     ])
   }
   if (options.strictLabels !== undefined) {
@@ -145,6 +169,8 @@ const MAX_REACTORS = 8
 /** Wire the public API onto a concrete reactor. */
 export const createDlinter = (load: LoadReactor): Dlinter => {
   const reactors = new Map<string, Promise<Reactor>>()
+  /** Keys whose load has settled, so eviction never drops one still in flight. */
+  const settled = new Set<string>()
 
   const instance = (options: LintOptions): Promise<Reactor> => {
     const pairs = environment(options)
@@ -156,15 +182,29 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
     if (!reactor) {
       reactor = load(pairs)
       reactors.set(key, reactor)
-      // A cached rejection would make one transient failure permanent.
-      reactor.catch(() => reactors.delete(key))
 
-      // A `Map` iterates in insertion order, so the first key is the oldest —
-      // never this one, which was just appended.
+      reactor.then(
+        () => settled.add(key),
+        () => {
+          // A cached rejection would make one transient failure permanent — but
+          // only delete this load's entry, since an eviction may have let a
+          // newer load take the key in the meantime.
+          settled.delete(key)
+          if (reactors.get(key) === reactor) {
+            reactors.delete(key)
+          }
+        },
+      )
+
+      // A `Map` iterates in insertion order, so the first *settled* key is the
+      // oldest that is safe to drop; the one just added is still in flight.
       if (reactors.size > MAX_REACTORS) {
-        const oldest = reactors.keys().next()
-        if (!oldest.done) {
-          reactors.delete(oldest.value)
+        for (const candidate of reactors.keys()) {
+          if (settled.has(candidate)) {
+            reactors.delete(candidate)
+            settled.delete(candidate)
+            break
+          }
         }
       }
     }
