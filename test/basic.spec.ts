@@ -193,3 +193,16 @@ test('an empty trustedRegistries list does not mean "trust nothing"', async () =
     delete process.env.HADOLINT_TRUSTED_REGISTRIES
   }
 })
+
+test('ignore and severityOverrides reach a parse error', async () => {
+  // DL1000 is reported outside hadolint's check list, so it cannot be filtered
+  // or re-levelled through the reactor's environment: the findings are the only
+  // place it exists.
+  const BROKEN = 'FROM\n'
+
+  const ignored = await lint(BROKEN, { ignore: ['DL1000'] })
+  expect(ignored.map(({ code }) => code)).not.toContain('DL1000')
+
+  const reified = await lint(BROKEN, { severityOverrides: { DL1000: 'style' } })
+  expect(reified[0]).toMatchObject({ code: 'DL1000', level: 'style' })
+})

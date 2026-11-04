@@ -36,31 +36,6 @@ const inherited = (): Array<[string, string]> => {
   )
 }
 
-/** Severity overrides, grouped into the four variables hadolint reads. */
-const overrides = (
-  byRule: Partial<Record<string, Severity>>,
-): Array<[string, string]> => {
-  const byLevel: Record<Severity, string[]> = {
-    error: [],
-    info: [],
-    style: [],
-    warning: [],
-  }
-
-  for (const [code, level] of Object.entries(byRule)) {
-    // `Partial`, so a key may be present with no level; skip it rather than
-    // widening the type.
-    if (level) {
-      byLevel[level].push(code)
-    }
-  }
-
-  return Object.entries(byLevel).map(([level, codes]) => [
-    `HADOLINT_OVERRIDE_${level.toUpperCase()}`,
-    codes.join(','),
-  ])
-}
-
 /** The types hadolint can read back out of `HADOLINT_REQUIRE_LABELS`. */
 const LABEL_TYPES: ReadonlySet<string> = new Set<LabelType>([
   'email',
@@ -106,12 +81,6 @@ const checkRegistry = (registry: string): void => {
 const explicit = (options: LintOptions): Array<[string, string]> => {
   const pairs: Array<[string, string]> = []
 
-  if (options.ignore) {
-    pairs.push(['HADOLINT_IGNORE', options.ignore.join(',')])
-  }
-  if (options.severityOverrides) {
-    pairs.push(...overrides(options.severityOverrides))
-  }
   if (options.trustedRegistries) {
     for (const registry of options.trustedRegistries) {
       checkRegistry(registry)
@@ -163,6 +132,17 @@ const environment = (options: LintOptions): readonly string[] => {
   // provide. Without `HOME` the reactor dies before linting anything.
   const pairs = new Map<string, string>([['HOME', '/'], ...inherited()])
 
+  // `ignore` and `severityOverrides` are applied to the findings in JS, so the
+  // reactor must not also apply an inherited copy — the explicit option wins.
+  if (options.ignore) {
+    pairs.delete('HADOLINT_IGNORE')
+  }
+  if (options.severityOverrides) {
+    for (const level of ['ERROR', 'WARNING', 'INFO', 'STYLE']) {
+      pairs.delete(`HADOLINT_OVERRIDE_${level}`)
+    }
+  }
+
   for (const [key, value] of explicit(options)) {
     // An empty value is not the same as an absent one to hadolint: it reads
     // `HADOLINT_TRUSTED_REGISTRIES=` as the single registry "", which matches
@@ -213,10 +193,19 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       options: LintOptions = {},
     ): Promise<LintResult[]> => {
       const { lint } = await instance(options)
-      // `ignore` and `severityOverrides` travel as `HADOLINT_IGNORE` and
-      // `HADOLINT_OVERRIDE_*`, so the reactor has already filtered and
-      // relabelled these; parsing is all that is left.
-      return JSON.parse(await lint(dockerfile)) as LintResult[]
+      const findings = JSON.parse(await lint(dockerfile)) as LintResult[]
+
+      // Filtering and relabelling happen here rather than in the reactor for one
+      // reason: a parse error is reported as `DL1000` outside hadolint's check
+      // list, so `HADOLINT_IGNORE` and `HADOLINT_OVERRIDE_*` cannot reach it.
+      const ignored = new Set(options.ignore ?? [])
+      return findings
+        .filter(({ code }) => !ignored.has(code))
+        .map(finding => {
+          const level: Severity | undefined =
+            options.severityOverrides?.[finding.code]
+          return level ? { ...finding, level } : finding
+        })
     },
 
     getVersion: async (): Promise<string> => {
