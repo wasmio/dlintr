@@ -24,58 +24,102 @@ export interface Dlinter {
  */
 export type LoadReactor = (env: readonly string[]) => Promise<Reactor>
 
+/** The `HADOLINT_*` variables already set in `process.env`, if this is Node. */
+const inherited = (): Array<[string, string]> => {
+  const env = (
+    globalThis as { process?: { env?: Record<string, string | undefined> } }
+  ).process?.env
+
+  return Object.entries(env ?? {}).filter(
+    (entry): entry is [string, string] =>
+      entry[0].startsWith('HADOLINT_') && entry[1] !== undefined,
+  )
+}
+
+/** Severity overrides, grouped into the four variables hadolint reads. */
+const overrides = (
+  byRule: Partial<Record<string, Severity>>,
+): Array<[string, string]> => {
+  const byLevel: Record<Severity, string[]> = {
+    error: [],
+    info: [],
+    style: [],
+    warning: [],
+  }
+
+  for (const [code, level] of Object.entries(byRule)) {
+    // `Partial`, so a key may be present with no level; skip it rather than
+    // widening the type.
+    if (level) {
+      byLevel[level].push(code)
+    }
+  }
+
+  return Object.entries(byLevel).map(([level, codes]) => [
+    `HADOLINT_OVERRIDE_${level.toUpperCase()}`,
+    codes.join(','),
+  ])
+}
+
+/** The options that have a `HADOLINT_*` spelling. */
+const explicit = (options: LintOptions): Array<[string, string]> => {
+  const pairs: Array<[string, string]> = []
+
+  if (options.ignore) {
+    pairs.push(['HADOLINT_IGNORE', options.ignore.join(',')])
+  }
+  if (options.severityOverrides) {
+    pairs.push(...overrides(options.severityOverrides))
+  }
+  if (options.trustedRegistries) {
+    pairs.push([
+      'HADOLINT_TRUSTED_REGISTRIES',
+      options.trustedRegistries.join(','),
+    ])
+  }
+  if (options.requireLabels) {
+    pairs.push([
+      'HADOLINT_REQUIRE_LABELS',
+      Object.entries(options.requireLabels)
+        .map(([label, type]) => `${label}:${type}`)
+        .join(','),
+    ])
+  }
+  if (options.strictLabels !== undefined) {
+    pairs.push(['HADOLINT_STRICT_LABELS', options.strictLabels ? '1' : ''])
+  }
+  if (options.disableIgnorePragma !== undefined) {
+    pairs.push([
+      'HADOLINT_DISABLE_IGNORE_PRAGMA',
+      options.disableIgnorePragma ? '1' : '',
+    ])
+  }
+
+  return pairs
+}
+
 /**
  * The environment hadolint reads, as `KEY=value` pairs.
  *
- * Each option is also spelled as the `HADOLINT_*` variable it stands for, so one
- * path carries both. A Node host gets its `process.env` for free — configure
- * `HADOLINT_TRUSTED_REGISTRIES` once and every call sees it — while a browser
- * has no `process` and simply has nothing to inherit. An explicit option wins
- * over the variable it corresponds to.
+ * Every option is spelled as the `HADOLINT_*` variable it stands for, so there is
+ * one path rather than two: a Node host gets its `process.env` for free —
+ * configure `HADOLINT_TRUSTED_REGISTRIES` once and every call sees it — while a
+ * browser has no `process` and simply has nothing to inherit.
  *
- * The four below reach the reactor because they change what the *rules* do;
- * `ignore` and `severityOverrides` do not need it, since they filter and
- * relabel findings that are already computed.
+ * An explicit option wins over the variable it corresponds to, including when it
+ * is empty. `ignore: []` writes an empty `HADOLINT_IGNORE`, which hadolint reads
+ * as a list holding one unusable code, so nothing is ignored — the inherited
+ * value is cleared rather than merely added to.
  */
 const environment = (options: LintOptions): readonly string[] => {
   // hadolint resolves its config through `getHomeDirectory`, and GHC's
   // implementation falls back to `getEffectiveUserID`, which wasip1 does not
   // provide. Without `HOME` the reactor dies before linting anything.
-  const pairs = new Map<string, string>([['HOME', '/']])
-
-  const processEnv = (
-    globalThis as { process?: { env?: Record<string, string | undefined> } }
-  ).process?.env
-
-  for (const [key, value] of Object.entries(processEnv ?? {})) {
-    if (key.startsWith('HADOLINT_') && value !== undefined) {
-      pairs.set(key, value)
-    }
-  }
-
-  if (options.trustedRegistries) {
-    pairs.set(
-      'HADOLINT_TRUSTED_REGISTRIES',
-      options.trustedRegistries.join(','),
-    )
-  }
-  if (options.requireLabels) {
-    pairs.set(
-      'HADOLINT_REQUIRE_LABELS',
-      Object.entries(options.requireLabels)
-        .map(([label, type]) => `${label}:${type}`)
-        .join(','),
-    )
-  }
-  if (options.strictLabels !== undefined) {
-    pairs.set('HADOLINT_STRICT_LABELS', options.strictLabels ? '1' : '')
-  }
-  if (options.disableIgnorePragma !== undefined) {
-    pairs.set(
-      'HADOLINT_DISABLE_IGNORE_PRAGMA',
-      options.disableIgnorePragma ? '1' : '',
-    )
-  }
+  const pairs = new Map<string, string>([
+    ['HOME', '/'],
+    ...inherited(),
+    ...explicit(options),
+  ])
 
   return [...pairs].map(([key, value]) => `${key}=${value}`)
 }
@@ -106,22 +150,10 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       options: LintOptions = {},
     ): Promise<LintResult[]> => {
       const { lint } = await instance(options)
-      const findings = JSON.parse(await lint(dockerfile)) as LintResult[]
-
-      // `--ignore` and `--error`/`--warning`/… used to be CLI arguments. The
-      // reactor's `lint` takes only the Dockerfile, so both are applied here.
-      // Neither needs the Haskell side — they are filtering and relabelling —
-      // so neither is lost along with the argument surface.
-      const ignored = new Set(options.ignore ?? [])
-      return findings
-        .filter(({ code }) => !ignored.has(code))
-        .map(finding => {
-          const level: Severity | undefined =
-            options.severityOverrides?.[finding.code]
-          // Only re-level when there is an override, so the common case does
-          // not rebuild every finding: `level` keeps its position either way.
-          return level ? { ...finding, level } : finding
-        })
+      // `ignore` and `severityOverrides` travel as `HADOLINT_IGNORE` and
+      // `HADOLINT_OVERRIDE_*`, so the reactor has already filtered and
+      // relabelled these; parsing is all that is left.
+      return JSON.parse(await lint(dockerfile)) as LintResult[]
     },
 
     getVersion: async (): Promise<string> => {

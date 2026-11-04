@@ -30,7 +30,8 @@ export type LabelType =
  *
  * Every field is also read from the matching `HADOLINT_*` variable in
  * `process.env` when it is not given here, so a Node host can configure the
- * linter once for the whole process. An explicit field wins over the variable.
+ * linter once for the whole process; a browser has no `process` and inherits
+ * nothing. An explicit field wins over the variable, including when it is empty.
  */
 export interface LintOptions {
   /** Rule codes to suppress, e.g. `['DL3007']`. `HADOLINT_IGNORE`. */
@@ -56,7 +57,15 @@ export interface LintOptions {
    * `HADOLINT_REQUIRE_LABELS`. Drives DL3049 and DL3050–DL3055.
    */
   requireLabels?: Record<string, LabelType>
-  /** Require every label in {@link requireLabels}, not only those present. `HADOLINT_STRICT_LABELS`. */
+  /**
+   * Reject labels that are not in {@link requireLabels}. `HADOLINT_STRICT_LABELS`.
+   *
+   * DL3050, "superfluous label(s) present". With nothing in {@link requireLabels}
+   * every label is superfluous, so this reports them all.
+   *
+   * Independent of the missing-label check: DL3049 reports required labels that
+   * are absent, which this neither causes nor suppresses.
+   */
   strictLabels?: boolean
   /** Ignore `# hadolint ignore=…` pragmas in the Dockerfile. `HADOLINT_DISABLE_IGNORE_PRAGMA`. */
   disableIgnorePragma?: boolean

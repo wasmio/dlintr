@@ -59,6 +59,20 @@ test('re-levels an individual rule with `severityOverrides`', async () => {
   expect(results[0]).toMatchObject({ code: 'DL3007', level: 'error' })
 })
 
+test('an explicit option clears the variable it overrides', async () => {
+  process.env.HADOLINT_IGNORE = 'DL3007'
+  try {
+    // The inherited value suppresses DL3007; an empty list has to undo that
+    // rather than merely add nothing to it.
+    await expect(lint(UNPINNED)).resolves.toEqual([])
+    await expect(lint(UNPINNED, { ignore: [] })).resolves.toEqual([
+      expect.objectContaining({ code: 'DL3007' }),
+    ])
+  } finally {
+    delete process.env.HADOLINT_IGNORE
+  }
+})
+
 test('reads HADOLINT_* from process.env when the option is absent', async () => {
   process.env.HADOLINT_IGNORE = 'DL3007'
   try {
