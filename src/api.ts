@@ -78,6 +78,16 @@ const explicit = (options: LintOptions): Array<[string, string]> => {
     ])
   }
   if (options.requireLabels) {
+    for (const label of Object.keys(options.requireLabels)) {
+      // hadolint splits the schema on commas and then on the first colon, so a
+      // name holding either would quietly become two requirements, or one with
+      // a truncated name. Say so here instead.
+      if (label.includes(',') || label.includes(':')) {
+        throw new TypeError(
+          `dlintr: label name ${JSON.stringify(label)} cannot contain a comma or a colon`,
+        )
+      }
+    }
     pairs.push([
       'HADOLINT_REQUIRE_LABELS',
       Object.entries(options.requireLabels)
@@ -124,6 +134,14 @@ const environment = (options: LintOptions): readonly string[] => {
   return [...pairs].map(([key, value]) => `${key}=${value}`)
 }
 
+/**
+ * How many reactors to keep. Each is a WebAssembly instance over a 7.6 MiB
+ * module, and the cache key is the whole environment, so an app that varies
+ * `ignore` or `trustedRegistries` per call would otherwise hold one instance per
+ * distinct combination for the life of the process.
+ */
+const MAX_REACTORS = 8
+
 /** Wire the public API onto a concrete reactor. */
 export const createDlinter = (load: LoadReactor): Dlinter => {
   const reactors = new Map<string, Promise<Reactor>>()
@@ -140,6 +158,15 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       reactors.set(key, reactor)
       // A cached rejection would make one transient failure permanent.
       reactor.catch(() => reactors.delete(key))
+
+      // A `Map` iterates in insertion order, so the first key is the oldest —
+      // never this one, which was just appended.
+      if (reactors.size > MAX_REACTORS) {
+        const oldest = reactors.keys().next()
+        if (!oldest.done) {
+          reactors.delete(oldest.value)
+        }
+      }
     }
     return reactor
   }

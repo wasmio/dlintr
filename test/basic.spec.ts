@@ -1,3 +1,6 @@
+import { createDlinter } from '../src/api.js'
+import type { Reactor } from '../src/reactor.js'
+
 import { getVersion, lint } from 'dlintr'
 import type { Severity } from 'dlintr'
 
@@ -151,4 +154,42 @@ test('an override for a rule that did not fire changes nothing', async () => {
   })
 
   expect(results).toEqual([])
+})
+
+test('rejects label names the schema encoding cannot carry', async () => {
+  // `HADOLINT_REQUIRE_LABELS` is `name:type,name:type`, so either character in a
+  // name would silently split it into two requirements.
+  await expect(
+    lint(CLEAN, { requireLabels: { 'a,b': 'text' } }),
+  ).rejects.toThrow(TypeError)
+  await expect(
+    lint(CLEAN, { requireLabels: { 'a:b': 'text' } }),
+  ).rejects.toThrow(TypeError)
+})
+
+test('bounds the reactor cache instead of leaking one per configuration', async () => {
+  let loads = 0
+  const load = (): Promise<Reactor> => {
+    loads += 1
+    return Promise.resolve({
+      lint: () => Promise.resolve('[]'),
+      version: () => Promise.resolve('v'),
+    })
+  }
+  const dlinter = createDlinter(load)
+
+  // One more than the cache holds.
+  const configurations = 9
+
+  for (let index = 0; index < configurations; index++) {
+    await dlinter.lint('FROM x\n', { ignore: [`DL${index}`] })
+  }
+  expect(loads).toBe(configurations)
+
+  // Nine distinct configurations against a cache of eight: the first has been
+  // evicted and is built again, the last is still there and is not.
+  await dlinter.lint('FROM x\n', { ignore: ['DL0'] })
+  expect(loads).toBe(configurations + 1)
+  await dlinter.lint('FROM x\n', { ignore: ['DL8'] })
+  expect(loads).toBe(configurations + 1)
 })

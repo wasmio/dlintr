@@ -48,4 +48,4 @@ export const getVersion = dlinter.getVersion
 
 export type { Dlinter, LoadReactor } from './api.js'
 export type { Reactor } from './reactor.js'
-export type { LintOptions, LintResult, Severity } from './types.js'
+export type { LabelType, LintOptions, LintResult, Severity } from './types.js'
