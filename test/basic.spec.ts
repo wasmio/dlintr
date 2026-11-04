@@ -1,5 +1,5 @@
 import { getVersion, lint } from 'dlintr'
-import type { Severity } from 'dlintr'
+import type { LabelType, Severity } from 'dlintr'
 
 /** A pinned base image, which hadolint has nothing to say about. */
 const CLEAN = 'FROM alpine:3.20\n'
@@ -59,32 +59,74 @@ test('re-levels an individual rule with `severityOverrides`', async () => {
   expect(results[0]).toMatchObject({ code: 'DL3007', level: 'error' })
 })
 
-test('reads configuration from the environment', async () => {
-  await expect(
-    lint(UNPINNED, { env: { HADOLINT_IGNORE: 'DL3007' } }),
-  ).resolves.toEqual([])
+test('an explicit option clears the variable it overrides', async () => {
+  process.env.HADOLINT_IGNORE = 'DL3007'
+  try {
+    // The inherited value suppresses DL3007; an empty list has to undo that
+    // rather than merely add nothing to it.
+    await expect(lint(UNPINNED)).resolves.toEqual([])
+    await expect(lint(UNPINNED, { ignore: [] })).resolves.toEqual([
+      expect.objectContaining({ code: 'DL3007' }),
+    ])
+  } finally {
+    delete process.env.HADOLINT_IGNORE
+  }
+})
+
+test('reads HADOLINT_* from process.env when the option is absent', async () => {
+  process.env.HADOLINT_IGNORE = 'DL3007'
+  try {
+    await expect(lint(UNPINNED)).resolves.toEqual([])
+  } finally {
+    delete process.env.HADOLINT_IGNORE
+  }
 })
 
 // This is what proves the reactor can see the environment at all, and so that
-// `env` was not lost along with the CLI's argument surface. The reactor imports
-// `environ_get`, the host supplies it, and this turns that from a reading of the
-// import table into a fact.
+// the `HADOLINT_*` variables reach it rather than being lost along with the
+// CLI's argument surface. The reactor imports `environ_get`, the host supplies
+// it, and this turns that from a reading of the import table into a fact.
 //
 // DL3026 only fires when trusted registries are configured *and* do not match:
 // with none configured, `Set.null allowed` short-circuits the check.
-test('DL3026 follows HADOLINT_TRUSTED_REGISTRIES, and reverts without it', async () => {
-  const withoutEnv = await lint(REGISTRY)
-  expect(withoutEnv.map(({ code }) => code)).not.toContain('DL3026')
+test('DL3026 follows trustedRegistries, and reverts without it', async () => {
+  const without = await lint(REGISTRY)
+  expect(without.map(({ code }) => code)).not.toContain('DL3026')
 
-  const withEnv = await lint(REGISTRY, {
-    env: { HADOLINT_TRUSTED_REGISTRIES: 'docker.io' },
-  })
-  expect(withEnv.map(({ code }) => code)).toContain('DL3026')
+  const trusted = await lint(REGISTRY, { trustedRegistries: ['docker.io'] })
+  expect(trusted.map(({ code }) => code)).toContain('DL3026')
 
   // And back again, so the environment is per-instance rather than leaking from
   // whichever reactor the previous call happened to cache.
   const reverted = await lint(REGISTRY)
   expect(reverted.map(({ code }) => code)).not.toContain('DL3026')
+})
+
+test('disableIgnorePragma overrides the inline pragma', async () => {
+  const source = '# hadolint ignore=DL3007\nFROM ubuntu:latest\n'
+
+  const respected = await lint(source)
+  expect(respected.map(({ code }) => code)).not.toContain('DL3007')
+
+  const disabled = await lint(source, { disableIgnorePragma: true })
+  expect(disabled.map(({ code }) => code)).toContain('DL3007')
+})
+
+test('requireLabels and strictLabels reach the label rules', async () => {
+  const source = 'FROM alpine:3.20\nLABEL maintainer="someone"\n'
+
+  const satisfied = await lint(source, {
+    requireLabels: { maintainer: 'text' },
+  })
+  expect(satisfied.map(({ code }) => code)).not.toContain('DL3049')
+
+  const missing = await lint(source, {
+    requireLabels: { maintainer: 'text', version: 'semver' },
+  })
+  expect(missing.map(({ code }) => code)).toContain('DL3049')
+
+  const superfluous = await lint(source, { strictLabels: true })
+  expect(superfluous.map(({ code }) => code)).toContain('DL3050')
 })
 
 test('the module is instantiated once and called repeatedly', async () => {
@@ -109,4 +151,78 @@ test('an override for a rule that did not fire changes nothing', async () => {
   })
 
   expect(results).toEqual([])
+})
+
+test('rejects label names the schema encoding cannot carry', async () => {
+  // `HADOLINT_REQUIRE_LABELS` is `name:type,name:type`, so either character in a
+  // name would silently split it into two requirements.
+  await expect(
+    lint(CLEAN, { requireLabels: { 'a,b': 'text' } }),
+  ).rejects.toThrow(TypeError)
+  await expect(
+    lint(CLEAN, { requireLabels: { 'a:b': 'text' } }),
+  ).rejects.toThrow(TypeError)
+})
+
+test('rejects a registry containing a comma', async () => {
+  await expect(
+    lint(REGISTRY, { trustedRegistries: ['docker.io,evil.example'] }),
+  ).rejects.toThrow(TypeError)
+})
+
+test('rejects a label type hadolint cannot read', async () => {
+  // hadolint drops a requirement whose type it does not recognise, which would
+  // silently stop the label being required rather than failing.
+  await expect(
+    lint(CLEAN, { requireLabels: { maintainer: 'string' as LabelType } }),
+  ).rejects.toThrow(TypeError)
+})
+
+test('an empty trustedRegistries list does not mean "trust nothing"', async () => {
+  // hadolint reads `HADOLINT_TRUSTED_REGISTRIES=` as the single registry "",
+  // so writing that value would make DL3026 fire on every image.
+  const empty = await lint(REGISTRY, { trustedRegistries: [] })
+  expect(empty.map(({ code }) => code)).not.toContain('DL3026')
+
+  process.env.HADOLINT_TRUSTED_REGISTRIES = 'docker.io'
+  try {
+    // And it clears an inherited value rather than writing an empty one.
+    const cleared = await lint(REGISTRY, { trustedRegistries: [] })
+    expect(cleared.map(({ code }) => code)).not.toContain('DL3026')
+  } finally {
+    delete process.env.HADOLINT_TRUSTED_REGISTRIES
+  }
+})
+
+test('ignore and severityOverrides reach a parse error', async () => {
+  // DL1000 is reported outside hadolint's check list, so it cannot be filtered
+  // or re-levelled through the reactor's environment: the findings are the only
+  // place it exists.
+  const BROKEN = 'FROM\n'
+
+  const ignored = await lint(BROKEN, { ignore: ['DL1000'] })
+  expect(ignored.map(({ code }) => code)).not.toContain('DL1000')
+
+  const reified = await lint(BROKEN, { severityOverrides: { DL1000: 'style' } })
+  expect(reified[0]).toMatchObject({ code: 'DL1000', level: 'style' })
+})
+
+test('an inherited HADOLINT_IGNORE reaches a parse error too', async () => {
+  process.env.HADOLINT_IGNORE = 'DL1000'
+  try {
+    const findings = await lint('FROM\n')
+    expect(findings.map(({ code }) => code)).not.toContain('DL1000')
+  } finally {
+    delete process.env.HADOLINT_IGNORE
+  }
+})
+
+test('an inherited HADOLINT_OVERRIDE_* reaches a parse error too', async () => {
+  process.env.HADOLINT_OVERRIDE_INFO = 'DL1000'
+  try {
+    const findings = await lint('FROM\n')
+    expect(findings[0]).toMatchObject({ code: 'DL1000', level: 'info' })
+  } finally {
+    delete process.env.HADOLINT_OVERRIDE_INFO
+  }
 })
