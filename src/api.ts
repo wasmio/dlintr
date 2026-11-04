@@ -153,9 +153,9 @@ const explicit = (options: LintOptions): Array<[string, string]> => {
  * browser has no `process` and simply has nothing to inherit.
  *
  * An explicit option wins over the variable it corresponds to, including when it
- * is empty. `ignore: []` writes an empty `HADOLINT_IGNORE`, which hadolint reads
- * as a list holding one unusable code, so nothing is ignored — the inherited
- * value is cleared rather than merely added to.
+ * is empty. Empty removes the variable rather than writing an empty one: hadolint
+ * reads `HADOLINT_TRUSTED_REGISTRIES=` as the single registry "", which matches
+ * nothing, so a written empty value would invert what an empty list means.
  */
 const environment = (options: LintOptions): readonly string[] => {
   // hadolint resolves its config through `getHomeDirectory`, and GHC's
@@ -179,32 +179,11 @@ const environment = (options: LintOptions): readonly string[] => {
   return [...pairs].map(([key, value]) => `${key}=${value}`)
 }
 
-/**
- * How many reactors to keep. Each is a WebAssembly instance over a 7.6 MiB
- * module, and the cache key is the whole environment, so an app that varies
- * `ignore` or `trustedRegistries` per call would otherwise hold one instance per
- * distinct combination for the life of the process.
- */
-const MAX_REACTORS = 8
-
 /** Wire the public API onto a concrete reactor. */
 export const createDlinter = (load: LoadReactor): Dlinter => {
+  // One reactor per distinct environment: WASI fixes it when the instance is
+  // created, and the reactor reads `HADOLINT_*` from it at that moment.
   const reactors = new Map<string, Promise<Reactor>>()
-  /** Keys whose load has settled, so eviction never drops one still in flight. */
-  const settled = new Set<string>()
-
-  /** Drop the oldest settled keys until the cache is back within its bound. */
-  const trim = (): void => {
-    for (const candidate of reactors.keys()) {
-      if (reactors.size <= MAX_REACTORS) {
-        return
-      }
-      if (settled.has(candidate)) {
-        reactors.delete(candidate)
-        settled.delete(candidate)
-      }
-    }
-  }
 
   const instance = (options: LintOptions): Promise<Reactor> => {
     const pairs = environment(options)
@@ -217,25 +196,13 @@ export const createDlinter = (load: LoadReactor): Dlinter => {
       reactor = load(pairs)
       reactors.set(key, reactor)
 
-      reactor.then(
-        () => {
-          settled.add(key)
-          // A burst of distinct loads can overshoot the bound while they are
-          // all pending; once one settles there is something safe to drop.
-          trim()
-        },
-        () => {
-          // A cached rejection would make one transient failure permanent — but
-          // only delete this load's entry, since an eviction may have let a
-          // newer load take the key in the meantime.
-          settled.delete(key)
-          if (reactors.get(key) === reactor) {
-            reactors.delete(key)
-          }
-        },
-      )
-
-      trim()
+      // A cached rejection would make one transient failure permanent, but only
+      // delete this load's entry: a newer load can hold the key meanwhile.
+      reactor.catch(() => {
+        if (reactors.get(key) === reactor) {
+          reactors.delete(key)
+        }
+      })
     }
     return reactor
   }

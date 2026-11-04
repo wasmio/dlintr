@@ -15,3 +15,5 @@ lint(text, { trustedRegistries: ["docker.io"] })
 ```
 
 `requireLabels` takes `{ label: type }`, where the type is one of `email`, `hash`, `rfc3339`, `semver`, `spdx`, `text`, `url` — hadolint spells the raw-text one `text`, not `string`.
+
+An explicit empty list removes the setting: `trustedRegistries: []` means "no restriction" and also clears an inherited `HADOLINT_TRUSTED_REGISTRIES`, rather than writing an empty value that hadolint would read as a single unusable entry.
