@@ -151,10 +151,13 @@ const explicit = (options: LintOptions): Array<[string, string]> => {
 /**
  * The environment hadolint reads, as `KEY=value` pairs.
  *
- * Every option is spelled as the `HADOLINT_*` variable it stands for, so there is
- * one path rather than two: a Node host gets its `process.env` for free —
- * configure `HADOLINT_TRUSTED_REGISTRIES` once and every call sees it — while a
- * browser has no `process` and simply has nothing to inherit.
+ * The four options that change what the rules do are spelled as the `HADOLINT_*`
+ * variable each stands for, so there is one path rather than two: a Node host gets
+ * its `process.env` for free — configure `HADOLINT_TRUSTED_REGISTRIES` once and
+ * every call sees it — while a browser inherits nothing.
+ *
+ * `ignore` and `severityOverrides` are deliberately absent: they act on the
+ * findings, because a parse error never reaches the checks.
  *
  * An explicit option wins over the variable it corresponds to, including when it
  * is empty. Empty removes the variable rather than writing an empty one: hadolint
